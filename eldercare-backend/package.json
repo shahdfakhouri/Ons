@@ -1,22 +1,23 @@
 {
   "name": "eldercare-backend",
   "version": "1.0.0",
-  "main": "index.js",
+  "description": "Backend server for ElderCare project using Express, MySQL, and JWT authentication",
+  "main": "src/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "nodemon src/server.js",
+    "dev": "nodemon src/server.js",
+    "test": "echo \"No test specified\" && exit 1"
   },
-  "keywords": [],
-  "author": "",
+  "author": "Shahd Fakhouri",
   "license": "ISC",
-  "description": "",
   "dependencies": {
-    "bcrypt": "^6.0.0",
+    "axios": "^1.7.2",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
-    "mysql2": "^3.15.1",
-    "nodemon": "^3.1.10",
-    "sequelize": "^6.37.7"
+    "mysql": "^2.18.1",
+    "nodemon": "^3.1.10"
   }
 }
