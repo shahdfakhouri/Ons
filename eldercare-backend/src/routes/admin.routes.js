@@ -33,5 +33,10 @@ router.get("/matches/:family_id", verifyToken, isAdmin, adminController.getFamil
 // Approve or reject a selected match
 router.post("/matches/:match_id/approve", verifyToken, isAdmin, adminController.approveMatch);
 router.post("/matches/:match_id/reject", verifyToken, isAdmin, adminController.rejectMatch);
+router.get("/active-users", verifyToken, isAdmin, adminController.getActiveUsers);
+router.put("/user/:role/:id", verifyToken, isAdmin, adminController.updateUserRoleOrStatus);
+router.get("/assignments", verifyToken, isAdmin, adminController.getElderAssignments);
+router.get("/health-summary", verifyToken, isAdmin, adminController.getElderHealthSummary);
+router.get("/export/health", verifyToken, isAdmin, adminController.exportHealthData);
 
 module.exports = router;

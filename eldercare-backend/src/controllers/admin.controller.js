@@ -266,3 +266,140 @@ exports.rejectMatch = (req, res) => {
     res.status(200).json({ msg: "Match rejected successfully" });
   });
 };
+
+//✅ Approve Match + Auto-assign
+exports.approveMatch = (req, res) => {
+  const { match_id } = req.params;
+
+  const sqlGet = "SELECT * FROM matches WHERE match_id = ?";
+  db.query(sqlGet, [match_id], (err, results) => {
+    if (err) return res.status(500).json({ msg: "Error fetching match", err });
+    if (results.length === 0) return res.status(404).json({ msg: "Match not found" });
+
+    const match = results[0];
+
+    db.query(
+      "UPDATE matches SET approved_by_admin = 1, status = 'approved' WHERE match_id = ?",
+      [match_id],
+      (err) => {
+        if (err) return res.status(500).json({ msg: "Error approving match", err });
+
+        if (match.matched_role === "caregiver") {
+          // Assign caregiver
+          db.query(
+            "UPDATE caregivers SET status = 'assigned' WHERE caregiver_id = ?",
+            [match.matched_id]
+          );
+        }
+
+        db.query(
+          "INSERT INTO elder_assignments (elder_id, caregiver_id, home_id, assigned_by) VALUES (?, ?, ?, 1)",
+          [match.family_id, match.matched_role === "caregiver" ? match.matched_id : null,
+           match.matched_role === "retirement_home" ? match.matched_id : null],
+          (err2) => {
+            if (err2) console.error("Assignment error:", err2);
+          }
+        );
+
+        res.status(200).json({ msg: "Match approved & caregiver/home assigned successfully" });
+      }
+    );
+  });
+};
+
+//👥 See all active users
+exports.getActiveUsers = (req, res) => {
+  const sql = `
+    SELECT 'caregiver' AS role, name, email, phone, status FROM caregivers
+    UNION
+    SELECT 'retirement_home' AS role, name, contact_email, contact_phone, 'active' AS status FROM retirement_homes
+    UNION
+    SELECT 'family' AS role, name, email, phone, 'active' AS status FROM family_members
+  `;
+  db.query(sql, (err, results) => {
+    if (err) return res.status(500).json({ msg: "DB error fetching active users", err });
+    res.status(200).json({ msg: "Active users retrieved", users: results });
+  });
+};
+
+//🔐 Manage roles / account status
+exports.updateUserRoleOrStatus = (req, res) => {
+  const { role, id } = req.params;
+  const { new_role, new_status } = req.body;
+
+  let table, idField;
+  if (role === "caregiver") { table = "caregivers"; idField = "caregiver_id"; }
+  else if (role === "retirement_home") { table = "retirement_homes"; idField = "home_id"; }
+  else if (role === "family") { table = "family_members"; idField = "family_id"; }
+  else return res.status(400).json({ msg: "Invalid role" });
+
+  const sql = `UPDATE ${table} SET status = ? WHERE ${idField} = ?`;
+  db.query(sql, [new_status, id], (err) => {
+    if (err) return res.status(500).json({ msg: "Error updating status", err });
+    res.status(200).json({ msg: `${role} updated successfully` });
+  });
+};
+
+//🧓 Elders & Assigned Caregivers
+exports.getElderAssignments = (req, res) => {
+  const sql = `
+    SELECT e.elder_id, e.name AS elder_name, 
+           c.name AS caregiver_name, c.status AS caregiver_status,
+           r.name AS home_name,
+           ea.assigned_at
+    FROM elder_assignments ea
+    LEFT JOIN elders e ON ea.elder_id = e.elder_id
+    LEFT JOIN caregivers c ON ea.caregiver_id = c.caregiver_id
+    LEFT JOIN retirement_homes r ON ea.home_id = r.home_id
+    ORDER BY ea.assigned_at DESC;
+  `;
+  db.query(sql, (err, results) => {
+    if (err) return res.status(500).json({ msg: "Error fetching assignments", err });
+    res.status(200).json({ msg: "Elder assignments retrieved", data: results });
+  });
+};
+
+//🕒 Last check-in & health summary
+exports.getElderHealthSummary = (req, res) => {
+  const sql = `
+    SELECT e.elder_id, e.name AS elder_name,
+           MAX(ch.checkin_time) AS last_checkin,
+           hl.blood_pressure, hl.blood_sugar, hl.temperature, hl.notes, hl.date
+    FROM elders e
+    LEFT JOIN checkins ch ON e.elder_id = ch.elder_id
+    LEFT JOIN health_logs hl ON e.elder_id = hl.elder_id
+    GROUP BY e.elder_id
+    ORDER BY e.elder_id;
+  `;
+  db.query(sql, (err, results) => {
+    if (err) return res.status(500).json({ msg: "Error fetching health summaries", err });
+    res.status(200).json({ msg: "Elder health summaries", summaries: results });
+  });
+};
+
+
+
+//📤 Export Data (CSV)
+const { Parser } = require("@json2csv/plainjs");
+
+exports.exportHealthData = (req, res) => {
+  db.query("SELECT * FROM health_logs", (err, results) => {
+    if (err) return res.status(500).json({ msg: "Error fetching data", err });
+
+    if (!results || results.length === 0) {
+      return res.status(404).json({ msg: "No health logs found to export" });
+    }
+
+    try {
+      const parser = new Parser();
+      const csv = parser.parse(results);
+
+      res.header("Content-Type", "text/csv");
+      res.attachment("health_logs.csv");
+      res.send(csv);
+    } catch (error) {
+      res.status(500).json({ msg: "Error generating CSV", error });
+    }
+  });
+};
+
