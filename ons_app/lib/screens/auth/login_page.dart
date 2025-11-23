@@ -1,0 +1,189 @@
+// lib/screens/auth/login_page.dart
+import 'package:flutter/material.dart';
+import 'package:ons_app/core/theme/app_theme.dart';
+import 'package:ons_app/models/user.dart';
+import 'package:ons_app/screens/auth/register_page.dart';
+import 'package:ons_app/screens/auth/role_navigator.dart';
+import 'package:ons_app/services/auth_service.dart';
+
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+
+  final _formKey = GlobalKey<FormState>();
+  bool _isSubmitting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+  if (!_formKey.currentState!.validate()) return;
+
+  setState(() {
+    _isSubmitting = true;
+    _error = null;
+  });
+
+  final email = _emailCtrl.text.trim();
+  final password = _passwordCtrl.text;
+
+  final User? user = await AuthService().login(
+    email: email,
+    password: password,
+  );
+
+  setState(() {
+    _isSubmitting = false;
+  });
+
+  if (user == null) {
+    setState(() {
+      _error = "Invalid email or password. Try again or register first.";
+    });
+    return;
+  }
+
+  if (!mounted) return;
+  navigateToRoleHome(context, user);
+}
+
+
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      backgroundColor: AppTheme.cream,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Card(
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      "Welcome back to Ons",
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            color: AppTheme.deepNavy,
+                            fontWeight: FontWeight.bold,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "Log in to access your dashboard",
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Email
+                    TextFormField(
+                      controller: _emailCtrl,
+                      decoration: const InputDecoration(
+                        labelText: "Email",
+                        prefixIcon: Icon(Icons.email),
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return "Please enter your email";
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Password
+                    TextFormField(
+                      controller: _passwordCtrl,
+                      decoration: const InputDecoration(
+                        labelText: "Password",
+                        prefixIcon: Icon(Icons.lock),
+                      ),
+                      obscureText: true,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return "Please enter your password";
+                        }
+                        if (value.length < 6) {
+                          return "Password must be at least 6 characters";
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    if (_error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Text(
+                          _error!,
+                          style: TextStyle(
+                            color: colors.error,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+
+                    const SizedBox(height: 8),
+
+                    // Login button
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: _isSubmitting ? null : _submit,
+                        child: _isSubmitting
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Text("Login"),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Go to Register
+                    TextButton(
+                      onPressed: _isSubmitting
+                          ? null
+                          : () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const RegisterPage(),
+                                ),
+                              );
+                            },
+                      child: const Text("Don't have an account? Sign up"),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
