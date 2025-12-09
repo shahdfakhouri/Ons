@@ -3,5 +3,3 @@
 ./eldercare-backend/package-lock.json
 ./eldercare-backend/node_modules/*
 ./eldercare-backend/uploads/
-
-./eldercare_frontend/*
