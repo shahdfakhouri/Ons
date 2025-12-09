@@ -6,4 +6,5 @@ const verifyToken = require("../middleware/authmiddleware");
 router.get("/", verifyToken, familyController.getDashboard);
 router.put("/update", verifyToken, familyController.updateProfile);
 
+
 module.exports = router;

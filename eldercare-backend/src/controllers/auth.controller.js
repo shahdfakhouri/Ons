@@ -8,6 +8,8 @@ const JWT_SECRET = "2003"; // move to .env later for security
 // role-table mapping
 const roleTables = {
   admin: "admins",
+
+  
   retirement_home: "retirement_homes",
   caregiver: "caregivers",
   elder: "elders",
@@ -113,7 +115,6 @@ exports.signup = async (req, res) => {
 // 🟡 SIGNIN
 exports.signin = async (req, res) => {
   const { email, password, role } = req.body;
-  console.log('سليم لوطي');
   if (!email || !password || !role) {
     return res.status(400).json({ msg: "Please fill in all fields including role" });
   }
