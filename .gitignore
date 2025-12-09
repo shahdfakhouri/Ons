@@ -1,0 +1,5 @@
+./eldercare-backend/.env
+./eldercare-backend/package.json
+./eldercare-backend/package-lock.json
+./eldercare-backend/node_modules/*
+./eldercare-backend/uploads/
