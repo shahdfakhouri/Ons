@@ -1,20 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:ons_app/core/theme/app_theme.dart';
-import 'package:ons_app/screens/admin/admin_dashboard.dart';
-import 'package:ons_app/screens/admin/approve_caregivers.dart';
-import 'package:ons_app/screens/admin/approve_retirement_homes.dart';
-import 'package:ons_app/screens/admin/health_logs_page.dart';
-import 'package:ons_app/screens/admin/matching_overview_page.dart';
-import 'package:ons_app/screens/admin/notifications_page.dart';
-import 'package:ons_app/screens/admin/payments_page.dart';
 import 'package:ons_app/services/auth_service.dart';
 import 'package:ons_app/screens/auth/login_page.dart';
 
-class AdminLayout extends StatelessWidget {
+// caregiver screens
+import 'package:ons_app/screens/caregiver/caregiver_dashboard.dart';
+import 'package:ons_app/screens/caregiver/upcoming_visits_page.dart';
+import 'package:ons_app/screens/caregiver/assigned_elders_page.dart';
+import 'package:ons_app/screens/caregiver/caregiver_health_logs_page.dart';
+import 'package:ons_app/screens/caregiver/caregiver_payments_page.dart';
+import 'package:ons_app/screens/caregiver/caregiver_messages_page.dart';
+
+
+
+class CaregiverLayout extends StatelessWidget {
   final String title;
   final Widget child;
 
-  const AdminLayout({
+  const CaregiverLayout({
     super.key,
     required this.title,
     required this.child,
@@ -41,7 +44,7 @@ class AdminLayout extends StatelessWidget {
         title: Row(
           children: [
             Text(
-              'Ons Admin',
+              'Ons Caregiver',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     color: AppTheme.deepNavy,
                     fontWeight: FontWeight.bold,
@@ -57,13 +60,13 @@ class AdminLayout extends StatelessWidget {
               child: Row(
                 children: [
                   const Icon(
-                    Icons.shield_outlined,
+                    Icons.volunteer_activism_outlined,
                     size: 18,
                     color: AppTheme.denim,
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Admin',
+                    'Caregiver',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppTheme.deepNavy,
                           fontWeight: FontWeight.w600,
@@ -76,7 +79,7 @@ class AdminLayout extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            tooltip: 'Profile (coming soon)',
+            tooltip: 'Profile',
             onPressed: () {},
             icon: const Icon(Icons.person_outline),
             color: colors.onSurface,
@@ -93,14 +96,11 @@ class AdminLayout extends StatelessWidget {
         ],
       ),
 
-      // =============== BODY ===============
+      // body with sidebar + main content
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Sidebar on the left
-          _AdminSidebar(currentTitle: title),
-
-          // Main content on the right
+          _CaregiverSidebar(currentTitle: title),
           Expanded(
             child: Container(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
@@ -115,8 +115,6 @@ class AdminLayout extends StatelessWidget {
                         ),
                   ),
                   const SizedBox(height: 16),
-
-                  // the page widget; it gets bounded height
                   Expanded(child: child),
                 ],
               ),
@@ -128,12 +126,10 @@ class AdminLayout extends StatelessWidget {
   }
 }
 
-// ================== SIDEBAR ==================
-
-class _AdminSidebar extends StatelessWidget {
+class _CaregiverSidebar extends StatelessWidget {
   final String currentTitle;
 
-  const _AdminSidebar({required this.currentTitle});
+  const _CaregiverSidebar({required this.currentTitle});
 
   @override
   Widget build(BuildContext context) {
@@ -160,91 +156,91 @@ class _AdminSidebar extends StatelessWidget {
               label: 'Dashboard',
               selected: currentTitle == 'Dashboard',
               onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const AdminDashboardPage(),
-                        ),
-                      );
-                    },
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CaregiverDashboardPage(),
+                  ),
+                );
+              },
             ),
             _SidebarItem(
-              icon: Icons.groups_3_outlined,
-              label: 'Matching overview',
-              selected: currentTitle == 'Matching overview',
-             onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const MatchingOverviewPage(),
-                        ),
-                      );
-                    },
-            ),
-            _SidebarItem(
-              icon: Icons.badge_outlined,
-              label: 'Approve caregivers',
-              selected: currentTitle == 'Approve caregivers',
+              icon: Icons.event_available_outlined,
+              label: 'Upcoming visits',
+              selected: currentTitle == 'Upcoming visits',
               onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ApproveCaregiversPage(),
-                        ),
-                      );
-                    },
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const UpcomingVisitsPage(),
+                  ),
+                );
+              },
             ),
             _SidebarItem(
-              icon: Icons.home_work_outlined,
-              label: 'Approve homes',
-              selected: currentTitle == 'Approve homes',
-             onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ApproveRetirementHomesPage(),
-                        ),
-                      );
-                    },
+              icon: Icons.groups_2_outlined,
+              label: 'Assigned elders',
+              selected: currentTitle == 'Assigned elders',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AssignedEldersPage(),
+                  ),
+                );
+              },
             ),
             _SidebarItem(
               icon: Icons.favorite_border,
               label: 'Health logs',
               selected: currentTitle == 'Health logs',
               onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const HealthLogsPage(),
-                        ),
-                      );
-                    },
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CaregiverHealthLogsPage(),
+                  ),
+                );
+              },
             ),
             _SidebarItem(
               icon: Icons.payments_outlined,
               label: 'Payments',
               selected: currentTitle == 'Payments',
-            onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const PaymentsPage(),
-                        ),
-                      );
-                    },
-            ),
-            _SidebarItem(
-              icon: Icons.notifications_active_outlined,
-              label: 'Notifications',
-              selected: currentTitle == 'Notifications',
               onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const NotificationsPage(),
-                        ),
-                      );
-                    },
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CaregiverPaymentsPage(),
+                  ),
+                );
+              },
             ),
+          _SidebarItem(
+  icon: Icons.chat_bubble_outline,
+  label: 'Messages',
+  selected: currentTitle == 'Messages',
+  onTap: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const CaregiverMessagesPage(),
+      ),
+    );
+  },
+),
+ 
+
+
+
+            
           ],
         ),
       ),
     );
   }
 }
+
 
 class _SidebarItem extends StatelessWidget {
   final IconData icon;
@@ -261,7 +257,7 @@ class _SidebarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color textColor =
+    final textColor =
         selected ? AppTheme.denim : AppTheme.deepNavy.withOpacity(0.8);
 
     return Material(

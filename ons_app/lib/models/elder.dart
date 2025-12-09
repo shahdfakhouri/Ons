@@ -1,19 +1,31 @@
+// lib/models/elder.dart
 class Elder {
   final String id;
   final String name;
   final int age;
-  final String medicalCondition;
-  final String familyId; // linked to User.id
-  final String careType; // daily visit, live-in, retirement home
-  final String? assignedCaregiverId;
 
-  Elder({
+  final String? medicalCondition;
+
+  /// 'home' or 'retirement_home'
+  final String livingType;
+
+  /// If elder lives at home (with family)
+  final String? familyId;
+
+  /// If elder lives in a retirement home
+  final String? retirementHomeId;
+
+  /// Primary caregiver assigned to this elder (can be null if not assigned yet)
+  final String? caregiverId;
+
+  const Elder({
     required this.id,
     required this.name,
     required this.age,
-    required this.medicalCondition,
-    required this.familyId,
-    required this.careType,
-    this.assignedCaregiverId,
+    this.medicalCondition,
+    required this.livingType,
+    this.familyId,
+    this.retirementHomeId,
+    this.caregiverId,
   });
 }

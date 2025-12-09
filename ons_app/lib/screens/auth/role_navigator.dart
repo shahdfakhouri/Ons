@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:ons_app/models/user.dart';
 import 'package:ons_app/screens/family/family_dashboard.dart';
 import 'package:ons_app/screens/caregiver/caregiver_dashboard.dart';
-import 'package:ons_app/screens/retirement_home/rh_dashboard.dart';
+import 'package:ons_app/screens/retirement_home/retirement_home_dashboard.dart';
 import 'package:ons_app/screens/admin/admin_dashboard.dart';
 
 void navigateToRoleHome(BuildContext context, User user) {
@@ -15,9 +15,10 @@ void navigateToRoleHome(BuildContext context, User user) {
       break;
     case UserRole.caregiver:
       destination = const CaregiverDashboardPage();
+
       break;
     case UserRole.retirementHome:
-      destination = const RhDashboardPage();
+      destination = const RetirementHomeDashboardPage();
       break;
     case UserRole.admin:
       destination = const AdminDashboardPage();

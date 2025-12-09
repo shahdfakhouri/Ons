@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:ons_app/core/theme/app_theme.dart';
-import 'package:ons_app/screens/caregiver/caregiver_layout.dart';
+import 'package:ons_app/screens/retirement_home/retirement_home_layout.dart';
 
-class CaregiverDashboardPage extends StatelessWidget {
-  const CaregiverDashboardPage({super.key});
+class RetirementHomeDashboardPage extends StatelessWidget {
+  const RetirementHomeDashboardPage({super.key});
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
 
-    return CaregiverLayout(
+    return RetirementHomeLayout(
       title: 'Dashboard',
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Welcome back 👋',
+              'Welcome, Home Manager 👋',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     color: AppTheme.deepNavy,
                     fontWeight: FontWeight.bold,
@@ -24,36 +24,36 @@ class CaregiverDashboardPage extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              'Here is a quick overview of your visits and elders today.',
+              'Overview of residents, external caregivers, and requests.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: colors.onSurface.withOpacity(0.7),
                   ),
             ),
             const SizedBox(height: 24),
 
-            // small stats row
             Wrap(
               spacing: 12,
               runSpacing: 8,
               children: const [
-                _StatChip(label: 'Visits today', value: '3'),
-                _StatChip(label: 'Assigned elders', value: '5'),
-                _StatChip(label: 'Pending health logs', value: '2'),
+                _StatChip(label: 'Residents', value: '24'),
+                _StatChip(label: 'Active caregivers', value: '5'),
+                _StatChip(label: 'Open requests', value: '3'),
               ],
             ),
             const SizedBox(height: 24),
 
             const _QuickCard(
-              icon: Icons.event_available_outlined,
-              title: 'Today’s visits',
-              subtitle: 'Check locations & timings for your upcoming visits.',
+              icon: Icons.group_outlined,
+              title: 'Residents',
+              subtitle:
+                  'View and update the list of elders living in your home.',
             ),
             const SizedBox(height: 16),
             const _QuickCard(
-              icon: Icons.favorite_outline,
-              title: 'Update health logs',
+              icon: Icons.assignment_outlined,
+              title: 'Care requests',
               subtitle:
-                  'Record vitals and notes after each visit to keep families informed.',
+                  'Request external caregivers for specific residents or shifts.',
             ),
           ],
         ),

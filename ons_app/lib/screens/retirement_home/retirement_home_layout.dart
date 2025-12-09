@@ -1,20 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:ons_app/core/theme/app_theme.dart';
-import 'package:ons_app/screens/admin/admin_dashboard.dart';
-import 'package:ons_app/screens/admin/approve_caregivers.dart';
-import 'package:ons_app/screens/admin/approve_retirement_homes.dart';
-import 'package:ons_app/screens/admin/health_logs_page.dart';
-import 'package:ons_app/screens/admin/matching_overview_page.dart';
-import 'package:ons_app/screens/admin/notifications_page.dart';
-import 'package:ons_app/screens/admin/payments_page.dart';
 import 'package:ons_app/services/auth_service.dart';
 import 'package:ons_app/screens/auth/login_page.dart';
 
-class AdminLayout extends StatelessWidget {
+import 'package:ons_app/screens/retirement_home/retirement_home_dashboard.dart';
+import 'package:ons_app/screens/retirement_home/residents_page.dart';
+import 'package:ons_app/screens/retirement_home/care_requests_page.dart';
+
+class RetirementHomeLayout extends StatelessWidget {
   final String title;
   final Widget child;
 
-  const AdminLayout({
+  const RetirementHomeLayout({
     super.key,
     required this.title,
     required this.child,
@@ -41,7 +38,7 @@ class AdminLayout extends StatelessWidget {
         title: Row(
           children: [
             Text(
-              'Ons Admin',
+              'Ons Home',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     color: AppTheme.deepNavy,
                     fontWeight: FontWeight.bold,
@@ -57,13 +54,13 @@ class AdminLayout extends StatelessWidget {
               child: Row(
                 children: [
                   const Icon(
-                    Icons.shield_outlined,
+                    Icons.home_work_outlined,
                     size: 18,
                     color: AppTheme.denim,
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'Admin',
+                    'Retirement home',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppTheme.deepNavy,
                           fontWeight: FontWeight.w600,
@@ -76,7 +73,7 @@ class AdminLayout extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            tooltip: 'Profile (coming soon)',
+            tooltip: 'Profile',
             onPressed: () {},
             icon: const Icon(Icons.person_outline),
             color: colors.onSurface,
@@ -92,15 +89,10 @@ class AdminLayout extends StatelessWidget {
           const SizedBox(width: 16),
         ],
       ),
-
-      // =============== BODY ===============
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Sidebar on the left
-          _AdminSidebar(currentTitle: title),
-
-          // Main content on the right
+          _HomeSidebar(currentTitle: title),
           Expanded(
             child: Container(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
@@ -115,8 +107,6 @@ class AdminLayout extends StatelessWidget {
                         ),
                   ),
                   const SizedBox(height: 16),
-
-                  // the page widget; it gets bounded height
                   Expanded(child: child),
                 ],
               ),
@@ -128,12 +118,10 @@ class AdminLayout extends StatelessWidget {
   }
 }
 
-// ================== SIDEBAR ==================
-
-class _AdminSidebar extends StatelessWidget {
+class _HomeSidebar extends StatelessWidget {
   final String currentTitle;
 
-  const _AdminSidebar({required this.currentTitle});
+  const _HomeSidebar({required this.currentTitle});
 
   @override
   Widget build(BuildContext context) {
@@ -160,84 +148,39 @@ class _AdminSidebar extends StatelessWidget {
               label: 'Dashboard',
               selected: currentTitle == 'Dashboard',
               onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const AdminDashboardPage(),
-                        ),
-                      );
-                    },
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const RetirementHomeDashboardPage(),
+                  ),
+                );
+              },
             ),
             _SidebarItem(
-              icon: Icons.groups_3_outlined,
-              label: 'Matching overview',
-              selected: currentTitle == 'Matching overview',
-             onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const MatchingOverviewPage(),
-                        ),
-                      );
-                    },
-            ),
-            _SidebarItem(
-              icon: Icons.badge_outlined,
-              label: 'Approve caregivers',
-              selected: currentTitle == 'Approve caregivers',
+              icon: Icons.group_outlined,
+              label: 'Residents',
+              selected: currentTitle == 'Residents',
               onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ApproveCaregiversPage(),
-                        ),
-                      );
-                    },
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ResidentsPage(),
+                  ),
+                );
+              },
             ),
             _SidebarItem(
-              icon: Icons.home_work_outlined,
-              label: 'Approve homes',
-              selected: currentTitle == 'Approve homes',
-             onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ApproveRetirementHomesPage(),
-                        ),
-                      );
-                    },
-            ),
-            _SidebarItem(
-              icon: Icons.favorite_border,
-              label: 'Health logs',
-              selected: currentTitle == 'Health logs',
+              icon: Icons.assignment_outlined,
+              label: 'Care requests',
+              selected: currentTitle == 'Care requests',
               onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const HealthLogsPage(),
-                        ),
-                      );
-                    },
-            ),
-            _SidebarItem(
-              icon: Icons.payments_outlined,
-              label: 'Payments',
-              selected: currentTitle == 'Payments',
-            onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const PaymentsPage(),
-                        ),
-                      );
-                    },
-            ),
-            _SidebarItem(
-              icon: Icons.notifications_active_outlined,
-              label: 'Notifications',
-              selected: currentTitle == 'Notifications',
-              onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const NotificationsPage(),
-                        ),
-                      );
-                    },
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CareRequestsPage(),
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -261,7 +204,7 @@ class _SidebarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color textColor =
+    final textColor =
         selected ? AppTheme.denim : AppTheme.deepNavy.withOpacity(0.8);
 
     return Material(
