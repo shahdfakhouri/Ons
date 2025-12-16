@@ -11,6 +11,7 @@ exports.updateProfile = (req, res) => {
 
 
 // 🩺 Caregiver logs elder health
+// 🩺 Caregiver logs elder health
 exports.logElderHealth = async (req, res) => {
   const caregiverId = req.user.id; // from JWT
   const { elder_id, blood_pressure, blood_sugar, temperature, notes } = req.body;
@@ -20,16 +21,20 @@ exports.logElderHealth = async (req, res) => {
   }
 
   try {
-    const result = await saveHealthLogAndAlert(elder_id, caregiverId, {
-      blood_pressure,
-      blood_sugar,
-      temperature,
-      notes,
+    // ✅ IMPORTANT: healthService expects ONE object (log)
+    const result = await saveHealthLogAndAlert({
+      caregiver_id: caregiverId,
+      elder_id: Number(elder_id),
+      blood_pressure: blood_pressure || null,
+      blood_sugar: blood_sugar || null,
+      temperature: temperature || null,
+      notes: notes || null,
     });
 
     res.status(201).json({
-      msg: "Health log saved",
-      alertsGenerated: result.alertsGenerated,
+      msg: "Health log saved ✅",
+      logId: result.insertId,
+      alerts: result.alerts,
     });
   } catch (error) {
     console.error("Error logging health:", error);

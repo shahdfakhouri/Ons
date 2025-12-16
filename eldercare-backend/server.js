@@ -13,6 +13,11 @@ const retirementRoutes = require("./src/routes/retirement.routes");
 const notificationsRoutes = require("./src/routes/notifications.routes");
 const trackerRoutes = require("./src/routes/tracker.routes");
 const deviceHealthRoutes = require("./src/routes/deviceHealth.routes");
+const medicationRoutes = require("./src/routes/medication.routes");
+const visitsRoutes = require("./src/routes/visits.routes");
+const emergencyRoutes = require("./src/routes/emergency.routes");
+const staffNotesRoutes = require("./src/routes/staffNotes.routes");
+const reportsRoutes = require("./src/routes/reports.routes");
 
 const app = express();
 
@@ -43,6 +48,11 @@ app.use("/api/retirement", retirementRoutes);
 app.use("/api/family", familyRoutes);
 app.use("/api/tracker", trackerRoutes);
 app.use("/api/health", deviceHealthRoutes);
+app.use("/api/medication", medicationRoutes);
+app.use("/api/retirement/visits", visitsRoutes);
+app.use("/api/emergency", emergencyRoutes);
+app.use("/api/retirement/notes", staffNotesRoutes);
+app.use("/api/retirement/reports", reportsRoutes);
 
 //Notifications 
 app.use("/api/notifications", notificationsRoutes);
