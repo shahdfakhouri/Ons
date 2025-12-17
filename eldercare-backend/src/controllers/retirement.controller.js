@@ -195,7 +195,7 @@ exports.assignCaregiverToElder = (req, res) => {
     return res.status(400).json({ msg: "Please provide elder_id and caregiver_id" });
   }
 
-  // 1) Check elder already assigned
+  // 1) Check elder already assigned (current assignment table)
   const checkSql = "SELECT * FROM elder_assignments WHERE elder_id = ?";
   db.query(checkSql, [elder_id], (err, result) => {
     if (err) return res.status(500).json({ msg: "Error checking assignment", err });
@@ -204,7 +204,7 @@ exports.assignCaregiverToElder = (req, res) => {
       return res.status(400).json({ msg: "This elder is already assigned to a caregiver" });
     }
 
-    // 2) Insert assignment
+    // 2) Insert CURRENT assignment
     const insertSql = `
       INSERT INTO elder_assignments (elder_id, caregiver_id, home_id, assigned_at)
       VALUES (?, ?, ?, NOW())
@@ -213,7 +213,18 @@ exports.assignCaregiverToElder = (req, res) => {
     db.query(insertSql, [elder_id, caregiver_id, homeId], (err2) => {
       if (err2) return res.status(500).json({ msg: "Error assigning caregiver", err: err2 });
 
-      // 3) Send notifications (caregiver)
+      // 3) Insert HISTORY assignment (end_date stays NULL until removed)
+      const historySql = `
+        INSERT INTO elder_caregiver_assignments (elder_id, caregiver_id, start_date, end_date)
+        VALUES (?, ?, CURDATE(), NULL)
+      `;
+      db.query(historySql, [elder_id, caregiver_id], (errH) => {
+        // Don't fail the whole request if history insert fails (optional),
+        // but log it so you can fix schema issues if any.
+        if (errH) console.error("⚠️ Failed to insert elder_caregiver_assignments history:", errH);
+      });
+
+      // 4) Send notifications (caregiver)
       const contactSQL = `
         SELECT 
           c.name AS caregiver_name, c.phone AS caregiver_phone, c.email AS caregiver_email,
@@ -229,7 +240,6 @@ exports.assignCaregiverToElder = (req, res) => {
           const { caregiver_name, caregiver_phone, caregiver_email, elder_name } = rows[0];
           const msg = `👵 Hi ${caregiver_name}, you've been assigned to take care of elder ${elder_name} at your retirement home.`;
 
-          // (Don't block response if SMS/email fails)
           try { if (caregiver_phone) await sendSMS(caregiver_phone, msg); } catch {}
           try { if (caregiver_email) await sendEmail(caregiver_email, "New Assignment", msg); } catch {}
         }
@@ -240,6 +250,7 @@ exports.assignCaregiverToElder = (req, res) => {
   });
 };
 
+
 // ❌ Remove assignment (no id column version)
 exports.removeElderAssignment = (req, res) => {
   const homeId = req.user.id;
@@ -249,7 +260,9 @@ exports.removeElderAssignment = (req, res) => {
     return res.status(400).json({ msg: "Please provide elder_id and caregiver_id" });
   }
 
-  const sql = "DELETE FROM elder_assignments WHERE elder_id = ? AND caregiver_id = ? AND home_id = ?";
+  const sql =
+    "DELETE FROM elder_assignments WHERE elder_id = ? AND caregiver_id = ? AND home_id = ?";
+
   db.query(sql, [elder_id, caregiver_id, homeId], (err, result) => {
     if (err) return res.status(500).json({ msg: "Error removing assignment", err });
 
@@ -257,9 +270,23 @@ exports.removeElderAssignment = (req, res) => {
       return res.status(404).json({ msg: "No matching assignment found for this home" });
     }
 
-    res.status(200).json({ msg: "Assignment removed successfully ❎" });
+    // Close history row
+    const closeHistorySql = `
+      UPDATE elder_caregiver_assignments
+      SET end_date = CURDATE()
+      WHERE elder_id = ? AND caregiver_id = ? AND end_date IS NULL
+      ORDER BY start_date DESC
+      LIMIT 1
+    `;
+
+    db.query(closeHistorySql, [elder_id, caregiver_id], (err2) => {
+      if (err2) console.error("⚠️ Failed to close assignment history:", err2);
+      // We still return success because the current assignment was removed.
+      return res.status(200).json({ msg: "Assignment removed successfully ❎" });
+    });
   });
 };
+
 const { sendSMS, sendEmail } = require("../services/notification.service");
 
 
