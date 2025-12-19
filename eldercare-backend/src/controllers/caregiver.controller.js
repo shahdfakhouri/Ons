@@ -5,7 +5,10 @@ const { saveHealthLogAndAlert } = require("../services/healthService");
 function getCaregiverMeta(caregiverId) {
   return new Promise((resolve, reject) => {
     db.query(
-      "SELECT caregiver_id, employment_type, home_id FROM caregivers WHERE caregiver_id = ? LIMIT 1",
+      `SELECT caregiver_id, employment_type, home_id
+       FROM caregivers
+       WHERE caregiver_id = ?
+       LIMIT 1`,
       [caregiverId],
       (err, rows) => {
         if (err) return reject(err);
@@ -196,69 +199,142 @@ exports.getMedicationLogs = (req, res) => {
     res.status(200).json({ logs: rows });
   });
 };
+exports.getMedicationStats = (req, res) => {
+  const elderId = Number(req.params.elder_id);
+  const days = Math.min(Math.max(Number(req.query.days || 7), 1), 90); // 1..90
+
+  // Summary counts + adherence
+  const summarySql = `
+    SELECT
+      SUM(status='taken')   AS taken_count,
+      SUM(status='missed')  AS missed_count,
+      SUM(status='skipped') AS skipped_count,
+      COUNT(*)              AS total_logs
+    FROM medication_logs
+    WHERE elder_id = ?
+      AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+  `;
+
+  // Per-medication breakdown
+  const perMedSql = `
+    SELECT
+      m.medication_id,
+      m.name,
+      m.dosage,
+      SUM(ml.status='taken')   AS taken_count,
+      SUM(ml.status='missed')  AS missed_count,
+      SUM(ml.status='skipped') AS skipped_count,
+      COUNT(ml.log_id)         AS total_logs,
+      MAX(ml.taken_at)         AS last_taken_at,
+      MAX(ml.created_at)       AS last_logged_at
+    FROM medications m
+    LEFT JOIN medication_logs ml
+      ON ml.medication_id = m.medication_id
+     AND ml.elder_id = m.elder_id
+     AND ml.created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+    WHERE m.elder_id = ?
+      AND m.active = 1
+    GROUP BY m.medication_id
+    ORDER BY missed_count DESC, taken_count ASC, m.created_at DESC
+  `;
+
+  db.query(summarySql, [elderId, days], (err, summaryRows) => {
+    if (err) return res.status(500).json({ msg: "Error fetching medication stats", err });
+
+    const s = summaryRows[0] || { taken_count: 0, missed_count: 0, skipped_count: 0, total_logs: 0 };
+    const adherence =
+      s.total_logs > 0 ? Math.round((Number(s.taken_count) / Number(s.total_logs)) * 100) : null;
+
+    db.query(perMedSql, [days, elderId], (err2, medsRows) => {
+      if (err2) return res.status(500).json({ msg: "Error fetching per-medication stats", err: err2 });
+
+      res.status(200).json({
+        elder_id: elderId,
+        window_days: days,
+        summary: {
+          ...s,
+          adherence_percent: adherence,
+        },
+        per_medication: medsRows,
+      });
+    });
+  });
+};
 
 // -------------------- 5) daily summary --------------------
 exports.upsertDailySummary = (req, res) => {
   const caregiverId = req.user.id;
-  const elderId = req.params.elder_id;
-  const homeId = req.assignment?.home_id || null; // null for freelance assignments
+  const elderId = Number(req.params.elder_id);
 
-  const { summary_date, mood, meals, activities, medication_taken, sleep_hours, notes } = req.body;
+  const {
+    mood,
+    meals,
+    activities,
+    medication_taken,
+    sleep_hours,
+    notes,
+  } = req.body || {};
 
-  const dateSql = summary_date ? "?" : "CURDATE()";
-  const paramsDate = summary_date ? [summary_date] : [];
-
+  // Get home_id from elder_assignments (works for internal + freelance)
   db.query(
-    `INSERT INTO daily_summaries
-       (elder_id, caregiver_id, home_id, summary_date, mood, meals, activities, medication_taken, sleep_hours, notes, updated_at)
-     VALUES
-       (?, ?, ?, ${dateSql}, ?, ?, ?, ?, ?, ?, NOW())
-     ON DUPLICATE KEY UPDATE
-       caregiver_id = VALUES(caregiver_id),
-       home_id = VALUES(home_id),
-       mood = VALUES(mood),
-       meals = VALUES(meals),
-       activities = VALUES(activities),
-       medication_taken = VALUES(medication_taken),
-       sleep_hours = VALUES(sleep_hours),
-       notes = VALUES(notes),
-       updated_at = NOW()`,
-    [
-      elderId,
-      caregiverId,
-      homeId,
-      ...paramsDate,
-      mood || null,
-      meals || null,
-      activities || null,
-      medication_taken === undefined ? null : (medication_taken ? 1 : 0),
-      sleep_hours === undefined ? null : Number(sleep_hours),
-      notes || null,
-    ],
-    (err) => {
-      if (err) return res.status(500).json({ msg: "Error saving daily summary", err });
-      res.status(200).json({ msg: "Daily summary saved ✅" });
+    `SELECT home_id FROM elder_assignments WHERE elder_id = ? AND caregiver_id = ? LIMIT 1`,
+    [elderId, caregiverId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ msg: "Error reading assignment", err });
+      if (!rows.length) return res.status(403).json({ msg: "Access denied: elder not assigned" });
+
+      const homeId = rows[0].home_id || null;
+
+      const sql = `
+        INSERT INTO daily_summaries
+          (elder_id, caregiver_id, home_id, summary_date, mood, meals, activities, medication_taken, sleep_hours, notes, created_at, updated_at)
+        VALUES
+          (?, ?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+          caregiver_id = VALUES(caregiver_id),
+          home_id = VALUES(home_id),
+          mood = VALUES(mood),
+          meals = VALUES(meals),
+          activities = VALUES(activities),
+          medication_taken = VALUES(medication_taken),
+          sleep_hours = VALUES(sleep_hours),
+          notes = VALUES(notes),
+          updated_at = NOW()
+      `;
+
+      db.query(
+        sql,
+        [
+          elderId,
+          caregiverId,
+          homeId,
+          mood || null,
+          meals || null,
+          activities || null,
+          medication_taken ?? null,
+          sleep_hours ?? null,
+          notes || null,
+        ],
+        (err2) => {
+          if (err2) return res.status(500).json({ msg: "Error saving daily summary", err: err2 });
+          res.status(200).json({ msg: "Daily summary saved ✅" });
+        }
+      );
     }
   );
 };
 
 exports.getDailySummary = (req, res) => {
-  const elderId = req.params.elder_id;
-  const date = req.query.date; // optional
+  const elderId = Number(req.params.elder_id);
 
-  const sql = `
-    SELECT summary_id, elder_id, caregiver_id, home_id, summary_date, mood, meals, activities,
-           medication_taken, sleep_hours, notes, created_at, updated_at
-    FROM daily_summaries
-    WHERE elder_id = ? AND summary_date = ${date ? "?" : "CURDATE()"}
-    LIMIT 1
-  `;
-  const params = date ? [elderId, date] : [elderId];
-
-  db.query(sql, params, (err, rows) => {
-    if (err) return res.status(500).json({ msg: "Error fetching daily summary", err });
-    res.status(200).json({ summary: rows[0] || null });
-  });
+  db.query(
+    `SELECT * FROM daily_summaries WHERE elder_id = ? AND summary_date = CURDATE() LIMIT 1`,
+    [elderId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ msg: "Error fetching daily summary", err });
+      res.status(200).json({ summary: rows[0] || null });
+    }
+  );
 };
 
 // -------------------- 6) incidents --------------------
@@ -301,7 +377,51 @@ exports.getMyIncidents = (req, res) => {
   );
 };
 
-// -------------------- 7) check-in --------------------
+exports.updateIncidentStatus = (req, res) => {
+  const caregiverId = req.user.id;
+  const incidentId = Number(req.params.incident_id);
+  const { status } = req.body || {};
+
+  const allowed = ["open", "reviewing", "resolved", "closed"];
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ msg: `Invalid status. Allowed: ${allowed.join(", ")}` });
+  }
+
+  db.query(
+    `UPDATE incidents
+     SET status = ?, updated_at = NOW()
+     WHERE incident_id = ? AND caregiver_id = ?`,
+    [status, incidentId, caregiverId],
+    (err, result) => {
+      if (err) return res.status(500).json({ msg: "Error updating incident status", err });
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ msg: "Incident not found or you don't have permission" });
+      }
+      res.status(200).json({ msg: "Incident status updated ✅" });
+    }
+  );
+};
+
+exports.getIncidentById = (req, res) => {
+  const caregiverId = req.user.id;
+  const incidentId = Number(req.params.incident_id);
+
+  db.query(
+    `SELECT i.*, e.name AS elder_name
+     FROM incidents i
+     JOIN elders e ON e.elder_id = i.elder_id
+     WHERE i.incident_id = ? AND i.caregiver_id = ?
+     LIMIT 1`,
+    [incidentId, caregiverId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ msg: "Error fetching incident", err });
+      if (!rows.length) return res.status(404).json({ msg: "Incident not found" });
+      res.status(200).json({ incident: rows[0] });
+    }
+  );
+};
+
+// -------------------- 7) check-in + location --------------------
 exports.checkInElder = (req, res) => {
   const caregiverId = req.user.id;
   const elderId = req.params.elder_id;
@@ -314,6 +434,57 @@ exports.checkInElder = (req, res) => {
       res.status(201).json({ msg: "Check-in saved ✅" });
     });
   });
+};
+
+exports.updateElderLocation = (req, res) => {
+  const elderId = Number(req.params.elder_id);
+
+  const { latitude, longitude } = req.body || {};
+
+  if (latitude == null || longitude == null) {
+    return res.status(400).json({ msg: "latitude and longitude are required" });
+  }
+
+  db.query(
+    `INSERT INTO elder_location (elder_id, latitude, longitude, recorded_at)
+     VALUES (?, ?, ?, NOW())`,
+    [elderId, latitude, longitude],
+    (err) => {
+      if (err) {
+        console.error("Location insert error:", err);
+        return res.status(500).json({ msg: "Error saving location", err });
+      }
+
+      // Optional: keep elders.last known location (string) if you use it elsewhere
+      const locationText = `${latitude},${longitude}`;
+      db.query(
+        `UPDATE elders SET location = ? WHERE elder_id = ?`,
+        [locationText, elderId],
+        () => {
+          // ignore error here — location history already saved
+          res.status(201).json({ msg: "Location saved ✅" });
+        }
+      );
+    }
+  );
+};
+
+exports.getElderLocationHistory = (req, res) => {
+  const elderId = Number(req.params.elder_id);
+  const limit = Math.min(Number(req.query.limit || 100), 500);
+
+  db.query(
+    `SELECT location_id, elder_id, latitude, longitude, recorded_at
+     FROM elder_location
+     WHERE elder_id = ?
+     ORDER BY recorded_at DESC
+     LIMIT ?`,
+    [elderId, limit],
+    (err, rows) => {
+      if (err) return res.status(500).json({ msg: "Error fetching location history", err });
+      res.status(200).json({ history: rows });
+    }
+  );
 };
 
 // -------------------- 8) shifts (INTERNAL ONLY) --------------------
@@ -366,10 +537,10 @@ exports.endMyShift = async (req, res) => {
 
     db.query(
       `UPDATE caregiver_shifts
-       SET shift_end = NOW(), notes = COALESCE(notes, ?)
+       SET shift_end = NOW(), notes = ?
        WHERE caregiver_id = ? AND home_id = ? AND shift_end IS NULL`,
-      [notes, caregiverId, meta.home_id],
-      (err, result) => {
+       [notes, caregiverId, meta.home_id],
+       (err, result) => {
         if (err) return res.status(500).json({ msg: "Error ending shift", err });
         if (!result.affectedRows) return res.status(400).json({ msg: "No active shift found" });
         res.status(200).json({ msg: "Shift ended ✅" });
@@ -432,4 +603,247 @@ exports.getMyShiftHistory = async (req, res) => {
   } catch (e) {
     res.status(500).json({ msg: "Server error", error: e.message });
   }
+};
+//status
+exports.getElderStatus = (req, res) => {
+  const elderId = req.params.elder_id;
+
+  const sql = `
+    SELECT
+      e.elder_id,
+      e.last_check_in,
+
+      c.checkin_id AS last_checkin_id,
+      c.caregiver_id AS last_checkin_by,
+      c.checkin_time AS last_checkin_time
+
+    FROM elders e
+    LEFT JOIN checkins c
+      ON c.checkin_id = (
+        SELECT c2.checkin_id
+        FROM checkins c2
+        WHERE c2.elder_id = e.elder_id
+        ORDER BY c2.checkin_time DESC
+        LIMIT 1
+      )
+    WHERE e.elder_id = ?
+    LIMIT 1
+  `;
+
+  db.query(sql, [elderId], (err, rows) => {
+    if (err) return res.status(500).json({ msg: "Error fetching elder status", err });
+    if (!rows.length) return res.status(404).json({ msg: "Elder not found" });
+
+    const status = rows[0];
+
+    // Optional: compute "is_recent_checkin" (e.g. last 8 hours)
+    // If you don't want assumptions, remove this block.
+    status.is_recent_checkin =
+      status.last_checkin_time
+        ? (Date.now() - new Date(status.last_checkin_time).getTime()) <= 8 * 60 * 60 * 1000
+        : false;
+
+    res.status(200).json({ msg: "Elder status retrieved ✅", status });
+  });
+};
+//alerts 
+exports.getMyAlerts = (req, res) => {
+  const caregiverId = req.user.id;
+
+  const sql = `
+    SELECT
+      n.id, n.type, n.message, n.severity, n.status, n.created_at,
+      n.user_id AS elder_id,
+      e.name AS elder_name
+    FROM admin_notifications n
+    JOIN elder_assignments ea
+      ON ea.elder_id = n.user_id
+     AND ea.caregiver_id = ?
+    LEFT JOIN elders e ON e.elder_id = n.user_id
+    WHERE n.status = 'open'
+      AND (n.type IN ('health_alert','alert','emergency') OR n.type = '')
+    ORDER BY n.created_at DESC
+    LIMIT 200
+  `;
+
+  db.query(sql, [caregiverId], (err, rows) => {
+    if (err) {
+      console.error("Error fetching caregiver alerts:", err);
+      return res.status(500).json({ msg: "Error fetching alerts", err });
+    }
+    res.status(200).json({ msg: "Alerts retrieved ✅", alerts: rows });
+  });
+};
+
+exports.getElderAlerts = (req, res) => {
+  const elderId = Number(req.params.elder_id);
+
+  const sql = `
+    SELECT id, type, message, severity, status, created_at
+    FROM admin_notifications
+    WHERE user_id = ?
+      AND status = 'open'
+      AND (type IN ('health_alert','alert','emergency') OR type = '')
+    ORDER BY created_at DESC
+    LIMIT 200
+  `;
+
+  db.query(sql, [elderId], (err, rows) => {
+    if (err) {
+      console.error("Error fetching elder alerts:", err);
+      return res.status(500).json({ msg: "Error fetching elder alerts", err });
+    }
+    res.status(200).json({ msg: "Elder alerts retrieved ✅", alerts: rows });
+  });
+};
+//9 visits 
+//Upcoming visits for ALL assigned elders
+exports.getMyUpcomingVisits = (req, res) => {
+  const caregiverId = req.user.id;
+  const limit = Math.min(Number(req.query.limit || 50), 500);
+  const from = req.query.from || null; // optional YYYY-MM-DD
+  const to = req.query.to || null;     // optional YYYY-MM-DD
+  const status = (req.query.status || "all").toLowerCase(); // pending|approved|all
+
+  let sql = `
+    SELECT
+      v.visit_id, v.scheduled_at, v.duration_minutes, v.status, v.notes,
+      e.elder_id, e.name AS elder_name,
+      f.family_id, f.name AS family_name, f.phone AS family_phone
+    FROM visits v
+    JOIN elder_assignments ea
+      ON ea.elder_id = v.elder_id
+     AND ea.caregiver_id = ?
+    JOIN elders e ON e.elder_id = v.elder_id
+    LEFT JOIN family_members f ON f.family_id = v.family_id
+    WHERE v.scheduled_at >= NOW()
+  `;
+
+  const params = [caregiverId];
+
+  if (from) {
+    sql += " AND DATE(v.scheduled_at) >= ? ";
+    params.push(from);
+  }
+  if (to) {
+    sql += " AND DATE(v.scheduled_at) <= ? ";
+    params.push(to);
+  }
+  if (status !== "all") {
+    sql += " AND v.status = ? ";
+    params.push(status);
+  }
+
+  sql += " ORDER BY v.scheduled_at ASC LIMIT ? ";
+  params.push(limit);
+
+  db.query(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ msg: "Error fetching upcoming visits", err });
+    res.status(200).json({ visits: rows });
+  });
+};
+//Upcoming visits for ONE assigned elder
+exports.getElderUpcomingVisits = (req, res) => {
+  const elderId = Number(req.params.elder_id);
+  const limit = Math.min(Number(req.query.limit || 50), 500);
+  const status = (req.query.status || "all").toLowerCase();
+
+  let sql = `
+    SELECT
+      v.visit_id, v.scheduled_at, v.duration_minutes, v.status, v.notes,
+      f.family_id, f.name AS family_name, f.phone AS family_phone
+    FROM visits v
+    LEFT JOIN family_members f ON f.family_id = v.family_id
+    WHERE v.elder_id = ?
+      AND v.scheduled_at >= NOW()
+  `;
+  const params = [elderId];
+
+  if (status !== "all") {
+    sql += " AND v.status = ? ";
+    params.push(status);
+  }
+
+  sql += " ORDER BY v.scheduled_at ASC LIMIT ? ";
+  params.push(limit);
+
+  db.query(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ msg: "Error fetching elder upcoming visits", err });
+    res.status(200).json({ visits: rows });
+  });
+};
+//Family contact info for ONE assigned elder
+exports.getElderFamilyContacts = (req, res) => {
+  const elderId = Number(req.params.elder_id);
+
+  const sql = `
+    SELECT ef.id, ef.relation, ef.is_primary,
+           f.family_id, f.name, f.email, f.phone
+    FROM elder_family ef
+    JOIN family_members f ON f.family_id = ef.family_id
+    WHERE ef.elder_id = ?
+    ORDER BY ef.is_primary DESC, ef.id DESC
+  `;
+
+  db.query(sql, [elderId], (err, rows) => {
+    if (err) return res.status(500).json({ msg: "Error fetching family contacts", err });
+    res.status(200).json({ family: rows });
+  });
+};
+//request a visit 
+exports.requestVisit = (req, res) => {
+  const caregiverId = req.user.id;
+  const elderId = Number(req.params.elder_id);
+
+  const { scheduled_at, duration_minutes, notes, family_id } = req.body || {};
+
+  if (!scheduled_at) {
+    return res.status(400).json({ msg: "scheduled_at is required (e.g. '2025-12-25 16:00:00')" });
+  }
+
+  const dur = duration_minutes == null ? 30 : Number(duration_minutes);
+  if (Number.isNaN(dur) || dur <= 0 || dur > 480) {
+    return res.status(400).json({ msg: "duration_minutes must be between 1 and 480" });
+  }
+
+  // optional: ensure future date
+  const when = new Date(scheduled_at);
+  if (Number.isNaN(when.getTime())) {
+    return res.status(400).json({ msg: "scheduled_at must be a valid datetime" });
+  }
+  if (when.getTime() < Date.now() - 60 * 1000) {
+    return res.status(400).json({ msg: "scheduled_at must be in the future" });
+  }
+
+  const insertVisit = (finalFamilyId) => {
+    const finalNotes = notes ? `[Caregiver request #${caregiverId}] ${notes}` : `[Caregiver request #${caregiverId}]`;
+
+    db.query(
+      `INSERT INTO visits (elder_id, family_id, scheduled_at, duration_minutes, status, notes)
+       VALUES (?, ?, ?, ?, 'pending', ?)`,
+      [elderId, finalFamilyId || null, scheduled_at, dur, finalNotes],
+      (err, result) => {
+        if (err) return res.status(500).json({ msg: "Error requesting visit", err });
+        res.status(201).json({ msg: "Visit requested ✅ (pending approval)", visit_id: result.insertId });
+      }
+    );
+  };
+
+  // If family_id provided, use it directly
+  if (family_id) return insertVisit(Number(family_id));
+
+  // Else: auto-pick primary family for this elder (if exists)
+  db.query(
+    `SELECT family_id
+     FROM elder_family
+     WHERE elder_id = ?
+     ORDER BY is_primary DESC, id DESC
+     LIMIT 1`,
+    [elderId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ msg: "Error fetching elder family", err });
+      const primaryFamilyId = rows.length ? rows[0].family_id : null;
+      insertVisit(primaryFamilyId);
+    }
+  );
 };

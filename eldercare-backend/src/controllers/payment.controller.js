@@ -52,18 +52,42 @@ exports.getPlatformRevenue = (req, res) => {
   });
 };
 
-// 🧾 Get caregiver/facility revenue
+// 🧾 Get caregiver / retirement_home revenue (based on transactions schema)
 exports.getReceiverRevenue = (req, res) => {
   const userId = req.user.id;
+  const role = (req.user.role || "").toLowerCase();
+
+  // caregiver earns via payout to caregiver
+  // retirement_home earns via transfer to retirement_home
+  let where = "";
+  let params = [];
+
+  if (role === "caregiver") {
+    where = "to_role = 'caregiver' AND to_id = ? AND type = 'payout'";
+    params = [userId];
+  } else if (role === "retirement_home") {
+    where = "to_role = 'retirement_home' AND to_id = ? AND type = 'transfer'";
+    params = [userId];
+  } else {
+    return res.status(403).json({ msg: "Only caregivers or retirement homes can view receiver revenue" });
+  }
+
   db.query(
-    "SELECT SUM(amount) AS total_revenue FROM transactions WHERE user_id=? AND type='payout'",
-    [userId],
-    (err, result) => {
+    `SELECT COALESCE(SUM(amount), 0) AS total_revenue
+     FROM transactions
+     WHERE ${where}`,
+    params,
+    (err, rows) => {
       if (err) return res.status(500).json({ msg: "Error fetching revenue", err });
-      res.status(200).json({ totalRevenue: result[0].total_revenue || 0 });
+      res.status(200).json({
+        role,
+        user_id: userId,
+        totalRevenue: rows[0].total_revenue
+      });
     }
   );
 };
+
 
 // 🧩 Create PayPal order
 exports.createPayment = async (req, res) => {
@@ -111,4 +135,35 @@ exports.capturePayment = async (req, res) => {
     console.error("Capture error:", error);
     res.status(500).json({ msg: "Error capturing PayPal payment" });
   }
+};
+exports.getReceiverTransactions = (req, res) => {
+  const userId = req.user.id;
+  const role = (req.user.role || "").toLowerCase();
+  const limit = Math.min(Number(req.query.limit || 50), 500);
+
+  let where = "";
+  let params = [];
+
+  if (role === "caregiver") {
+    where = "to_role='caregiver' AND to_id=? AND type='payout'";
+    params = [userId];
+  } else if (role === "retirement_home") {
+    where = "to_role='retirement_home' AND to_id=? AND type='transfer'";
+    params = [userId];
+  } else {
+    return res.status(403).json({ msg: "Only caregivers or retirement homes can view earnings history" });
+  }
+
+  db.query(
+    `SELECT transaction_id, payment_id, from_role, from_id, to_role, to_id, amount, type, created_at
+     FROM transactions
+     WHERE ${where}
+     ORDER BY created_at DESC
+     LIMIT ?`,
+    [...params, limit],
+    (err, rows) => {
+      if (err) return res.status(500).json({ msg: "Error fetching transactions", err });
+      res.status(200).json({ role, user_id: userId, transactions: rows });
+    }
+  );
 };

@@ -9,11 +9,20 @@ function parseBloodPressure(bpStr) {
   return { systolic: Number(match[1]), diastolic: Number(match[2]) };
 }
 
-function parseNumber(str) {
-  if (!str) return null;
+function parseNumber(value) {
+  if (value === undefined || value === null || value === "") return null;
+
+  // If already a number, just return it (unless NaN)
+  if (typeof value === "number") {
+    return Number.isNaN(value) ? null : value;
+  }
+
+  // Otherwise convert to string safely
+  const str = String(value);
   const match = str.match(/(\d+(\.\d+)?)/);
   return match ? Number(match[1]) : null;
 }
+
 
 exports.saveHealthLogAndAlert = async (log) => {
   return new Promise((resolve, reject) => {
