@@ -87,3 +87,37 @@ exports.resolveAlert = (req, res) => {
     res.status(200).json({ msg: "Alert marked as resolved" });
   });
 };
+// 🔔 Get my notifications (family/caregiver/elder/home/admin if you want)
+exports.getMyNotifications = (req, res) => {
+  const userId = req.user.id;
+
+  const sql = `
+    SELECT id, type, message, severity, status, is_read, created_at, resolved_at
+    FROM admin_notifications
+    WHERE user_id = ?
+    ORDER BY created_at DESC
+  `;
+
+  db.query(sql, [userId], (err, results) => {
+    if (err) return res.status(500).json({ msg: "Error fetching my notifications", err });
+    res.status(200).json({ msg: "My notifications retrieved ✅", notifications: results });
+  });
+};
+
+// ✅ Mark my notification as read (ownership check)
+exports.markMyAsRead = (req, res) => {
+  const userId = req.user.id;
+  const { id } = req.params;
+
+  db.query(
+    "UPDATE admin_notifications SET is_read = 1 WHERE id = ? AND user_id = ?",
+    [id, userId],
+    (err, result) => {
+      if (err) return res.status(500).json({ msg: "Error marking notification as read", err });
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ msg: "Notification not found (or not yours)" });
+      }
+      res.status(200).json({ msg: "Notification marked as read ✅" });
+    }
+  );
+};
