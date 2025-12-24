@@ -9,6 +9,12 @@ import 'package:ons_app/screens/admin/notifications_page.dart';
 import 'package:ons_app/screens/admin/payments_page.dart';
 import 'package:ons_app/services/auth_service.dart';
 import 'package:ons_app/screens/auth/login_page.dart';
+import 'package:ons_app/screens/admin/weekly_reports_page.dart';
+import 'package:ons_app/screens/admin/users_management_page.dart';
+import 'package:ons_app/screens/admin/elder_assignments_page.dart';
+import 'package:ons_app/screens/admin/gps_overview_page.dart';
+import 'package:ons_app/screens/admin/admin_analytics_page.dart';
+
 
 class AdminLayout extends StatelessWidget {
   final String title;
@@ -35,6 +41,8 @@ class AdminLayout extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppTheme.cream,
       appBar: AppBar(
+        automaticallyImplyLeading: false,
+
         backgroundColor: AppTheme.cream,
         elevation: 0,
         titleSpacing: 24,
@@ -239,6 +247,66 @@ class _AdminSidebar extends StatelessWidget {
                       );
                     },
             ),
+
+            _SidebarItem(
+  icon: Icons.article_outlined,
+  label: 'Weekly reports',
+  selected: currentTitle == 'Weekly Reports',
+  onTap: () {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const WeeklyReportsPage()),
+    );
+  },
+),
+
+
+_SidebarItem(
+  icon: Icons.manage_accounts_outlined,
+  label: 'Users management',
+  selected: currentTitle == 'Users Management',
+  onTap: () {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const UsersManagementPage()),
+    );
+  },
+),
+
+_SidebarItem(
+  icon: Icons.assignment_ind_outlined,
+  label: 'Elder assignments',
+  selected: currentTitle == 'Elder Assignments',
+  onTap: () {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const ElderAssignmentsPage()),
+    );
+  },
+),
+
+
+_SidebarItem(
+  icon: Icons.location_on_outlined,
+  label: 'GPS overview',
+  selected: currentTitle == 'GPS Overview',
+  onTap: () {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const GpsOverviewPage()),
+    );
+  },
+),
+
+_SidebarItem(
+  icon: Icons.analytics_outlined,
+  label: 'Analytics',
+  selected: currentTitle == 'Admin Analytics',
+  onTap: () {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const AdminAnalyticsPage()),
+    );
+  },
+),
+
+
+
           ],
         ),
       ),

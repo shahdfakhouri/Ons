@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:ons_app/core/theme/app_theme.dart';
 import 'package:ons_app/models/user.dart';
 import 'package:ons_app/services/auth_service.dart';
-import 'package:ons_app/screens/auth/role_navigator.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -15,8 +14,10 @@ class RegisterPage extends StatefulWidget {
 
 class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
+
   final _nameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
 
@@ -28,6 +29,7 @@ class _RegisterPageState extends State<RegisterPage> {
   void dispose() {
     _nameCtrl.dispose();
     _emailCtrl.dispose();
+    _phoneCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
     super.dispose();
@@ -35,6 +37,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+
     if (_passwordCtrl.text != _confirmCtrl.text) {
       setState(() => _error = "Passwords do not match");
       return;
@@ -46,17 +49,32 @@ class _RegisterPageState extends State<RegisterPage> {
     });
 
     final auth = AuthService();
-    final user = await auth.register(
+    final success = await auth.register(
       name: _nameCtrl.text.trim(),
       email: _emailCtrl.text.trim(),
       password: _passwordCtrl.text,
+      telephone: _phoneCtrl.text.trim(),
       role: _selectedRole,
     );
 
-    setState(() => _isSubmitting = false);
+    setState(() {
+      _isSubmitting = false;
+    });
 
+    if (!success) {
+      setState(() {
+        _error = "Registration failed. Please try again.";
+      });
+      return;
+    }
 
-    navigateToRoleHome(context, user);
+    if (!mounted) return;
+
+    // On success: go back to login
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Account created. You can now log in.")),
+    );
+    Navigator.of(context).pop(); // back to LoginPage
   }
 
   @override
@@ -104,6 +122,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                   const SizedBox(height: 24),
 
+                  // Name
                   TextFormField(
                     controller: _nameCtrl,
                     decoration: const InputDecoration(
@@ -114,6 +133,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                   const SizedBox(height: 16),
 
+                  // Email
                   TextFormField(
                     controller: _emailCtrl,
                     decoration: const InputDecoration(
@@ -124,6 +144,18 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                   const SizedBox(height: 16),
 
+                  // Phone
+                  TextFormField(
+                    controller: _phoneCtrl,
+                    decoration: const InputDecoration(
+                      labelText: "Phone number",
+                    ),
+                    validator: (v) =>
+                        v == null || v.trim().isEmpty ? "Required" : null,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Password
                   TextFormField(
                     controller: _passwordCtrl,
                     obscureText: true,
@@ -135,6 +167,7 @@ class _RegisterPageState extends State<RegisterPage> {
                   ),
                   const SizedBox(height: 16),
 
+                  // Confirm password
                   TextFormField(
                     controller: _confirmCtrl,
                     obscureText: true,
@@ -163,7 +196,6 @@ class _RegisterPageState extends State<RegisterPage> {
                         value: UserRole.retirementHome,
                         child: Text("Retirement Home Admin"),
                       ),
-                     
                     ],
                     onChanged: (value) {
                       if (value != null) {

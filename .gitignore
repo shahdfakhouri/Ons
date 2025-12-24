@@ -1,5 +1,17 @@
-./eldercare-backend/.env
-./eldercare-backend/package.json
-./eldercare-backend/package-lock.json
-./eldercare-backend/node_modules/*
-./eldercare-backend/uploads/
+
+
+
+
+# Secrets
+eldercare-backend/.env
+
+# Node
+eldercare-backend/node_modules/
+eldercare-backend/node
+
+# Flutter
+ons_app/build/
+ons_app/.dart_tool/
+
+# VS Code (optional - recommended)
+.vscode/

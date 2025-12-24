@@ -28,36 +28,38 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  Future<void> _submit() async {
-  if (!_formKey.currentState!.validate()) return;
+    Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
 
-  setState(() {
-    _isSubmitting = true;
-    _error = null;
-  });
-
-  final email = _emailCtrl.text.trim();
-  final password = _passwordCtrl.text;
-
-  final User? user = await AuthService().login(
-    email: email,
-    password: password,
-  );
-
-  setState(() {
-    _isSubmitting = false;
-  });
-
-  if (user == null) {
     setState(() {
-      _error = "Invalid email or password. Try again or register first.";
+      _isSubmitting = true;
+      _error = null;
     });
-    return;
+
+    final email = _emailCtrl.text.trim();
+    final password = _passwordCtrl.text;
+
+    final User? user = await AuthService().login(
+      email: email,
+      password: password,
+      role: UserRole.admin, // for now: admin login only
+    );
+
+    setState(() {
+      _isSubmitting = false;
+    });
+
+    if (user == null) {
+      setState(() {
+        _error = "Invalid email, password, or role.";
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    navigateToRoleHome(context, user);
   }
 
-  if (!mounted) return;
-  navigateToRoleHome(context, user);
-}
 
 
 
@@ -125,8 +127,8 @@ class _LoginPageState extends State<LoginPage> {
                         if (value == null || value.isEmpty) {
                           return "Please enter your password";
                         }
-                        if (value.length < 6) {
-                          return "Password must be at least 6 characters";
+                        if (value.length < 5) {
+                          return "Password must be at least 5 characters";
                         }
                         return null;
                       },
