@@ -63,9 +63,8 @@ exports.signup = async (req, res) => {
           break;
 
         case "retirement_home":
-          sql =
-            "INSERT INTO retirement_homes (name, contact_email, contact_phone, address, is_approved) VALUES (?, ?, ?, ?, 0)";
-          values = [name, email, telephone, address];
+          sql = "INSERT INTO retirement_homes (name, contact_email, password, contact_phone, address, is_approved) VALUES (?, ?, ?, ?, ?, 0)";
+          values = [name, email, hashedPassword, telephone, address];
           break;
 
         case "caregiver":

@@ -35,4 +35,11 @@ router.patch( "/admin/:id/read", verifyToken, isAdmin, notificationsController.m
 // ✅ Mark one notification as resolved
 router.patch("/admin/:id/resolve", verifyToken, isAdmin, notificationsController.resolveAlert);
 
+// 👤 My notifications (any logged-in user)
+router.get("/my", verifyToken, notificationsController.getMyNotifications);
+
+// ✅ Mark MY notification as read (any logged-in user)
+router.put("/:id/read", verifyToken, notificationsController.markMyAsRead);
+// (or router.patch("/:id/read", ...))
+
 module.exports = router;
