@@ -5,7 +5,6 @@ import 'package:ons_app/screens/auth/login_page.dart';
 
 import 'package:ons_app/screens/family/family_dashboard.dart';
 import 'package:ons_app/screens/family/family_elders_page.dart';
-import 'package:ons_app/screens/family/family_messages_page.dart';
 
 class FamilyLayout extends StatelessWidget {
   final String title;
@@ -169,19 +168,7 @@ class _FamilySidebar extends StatelessWidget {
                 );
               },
             ),
-            _SidebarItem(
-              icon: Icons.chat_bubble_outline,
-              label: 'Messages',
-              selected: currentTitle == 'Messages',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const FamilyMessagesPage(),
-                  ),
-                );
-              },
-            ),
+          
           ],
         ),
       ),

@@ -21,6 +21,9 @@ class _LoginPageState extends State<LoginPage> {
   bool _isSubmitting = false;
   String? _error;
 
+  // ✅ NEW: selected role
+  UserRole _selectedRole = UserRole.admin;
+
   @override
   void dispose() {
     _emailCtrl.dispose();
@@ -28,7 +31,22 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-    Future<void> _submit() async {
+  String _roleLabel(UserRole r) {
+    switch (r) {
+      case UserRole.admin:
+        return 'Admin';
+      case UserRole.retirementHome:
+        return 'Retirement Home';
+      case UserRole.caregiver:
+        return 'Caregiver';
+      case UserRole.family:
+        return 'Family';
+     // case UserRole.elder:
+       // return 'Elder';
+    }
+  }
+
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
@@ -39,10 +57,11 @@ class _LoginPageState extends State<LoginPage> {
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
 
+    // ✅ USE selected role (not hard-coded)
     final User? user = await AuthService().login(
       email: email,
       password: password,
-      role: UserRole.admin, // for now: admin login only
+      role: _selectedRole,
     );
 
     setState(() {
@@ -59,9 +78,6 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
     navigateToRoleHome(context, user);
   }
-
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -97,6 +113,45 @@ class _LoginPageState extends State<LoginPage> {
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 24),
+
+                    // ✅ NEW: Role picker
+                    DropdownButtonFormField<UserRole>(
+                      value: _selectedRole,
+                      decoration: const InputDecoration(
+                        labelText: "Role",
+                        prefixIcon: Icon(Icons.badge_outlined),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: UserRole.admin,
+                          child: Text("Admin"),
+                        ),
+                        DropdownMenuItem(
+                          value: UserRole.retirementHome,
+                          child: Text("Retirement Home"),
+                        ),
+                        DropdownMenuItem(
+                          value: UserRole.caregiver,
+                          child: Text("Caregiver"),
+                        ),
+                        DropdownMenuItem(
+                          value: UserRole.family,
+                          child: Text("Family"),
+                        ),
+                        // If you don’t allow elders to login, remove this:
+                        // DropdownMenuItem(
+                        //   value: UserRole.elder,
+                        //   child: Text("Elder"),
+                        // ),
+                      ],
+                      onChanged: _isSubmitting
+                          ? null
+                          : (v) {
+                              if (v == null) return;
+                              setState(() => _selectedRole = v);
+                            },
+                    ),
+                    const SizedBox(height: 16),
 
                     // Email
                     TextFormField(
@@ -160,13 +215,12 @@ class _LoginPageState extends State<LoginPage> {
                                 width: 20,
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Text("Login"),
+                            : Text("Login as ${_roleLabel(_selectedRole)}"),
                       ),
                     ),
 
                     const SizedBox(height: 12),
 
-                    // Go to Register
                     TextButton(
                       onPressed: _isSubmitting
                           ? null

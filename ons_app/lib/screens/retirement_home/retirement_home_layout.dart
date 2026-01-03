@@ -3,9 +3,12 @@ import 'package:ons_app/core/theme/app_theme.dart';
 import 'package:ons_app/services/auth_service.dart';
 import 'package:ons_app/screens/auth/login_page.dart';
 
-import 'package:ons_app/screens/retirement_home/retirement_home_dashboard.dart';
-import 'package:ons_app/screens/retirement_home/residents_page.dart';
-import 'package:ons_app/screens/retirement_home/care_requests_page.dart';
+import 'retirement_home_dashboard.dart';
+import 'elders_monitoring_page.dart';
+import 'caregivers_page.dart';
+import 'center_page.dart';
+import 'finance_page.dart';
+import 'visits_page.dart';
 
 class RetirementHomeLayout extends StatelessWidget {
   final String title;
@@ -53,11 +56,7 @@ class RetirementHomeLayout extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.home_work_outlined,
-                    size: 18,
-                    color: AppTheme.denim,
-                  ),
+                  const Icon(Icons.home_work_outlined, size: 18, color: AppTheme.denim),
                   const SizedBox(width: 6),
                   Text(
                     'Retirement home',
@@ -73,7 +72,7 @@ class RetirementHomeLayout extends StatelessWidget {
         ),
         actions: [
           IconButton(
-            tooltip: 'Profile',
+            tooltip: 'Profile (later)',
             onPressed: () {},
             icon: const Icon(Icons.person_outline),
             color: colors.onSurface,
@@ -82,9 +81,7 @@ class RetirementHomeLayout extends StatelessWidget {
             onPressed: () => _logout(context),
             icon: const Icon(Icons.logout, size: 18),
             label: const Text('Logout'),
-            style: TextButton.styleFrom(
-              foregroundColor: AppTheme.deepNavy,
-            ),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.deepNavy),
           ),
           const SizedBox(width: 16),
         ],
@@ -123,10 +120,14 @@ class _HomeSidebar extends StatelessWidget {
 
   const _HomeSidebar({required this.currentTitle});
 
+  void _go(BuildContext context, Widget page) {
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => page));
+  }
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 220,
+      width: 240,
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 16, 0, 16),
         padding: const EdgeInsets.symmetric(vertical: 16),
@@ -147,40 +148,37 @@ class _HomeSidebar extends StatelessWidget {
               icon: Icons.dashboard_outlined,
               label: 'Dashboard',
               selected: currentTitle == 'Dashboard',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const RetirementHomeDashboardPage(),
-                  ),
-                );
-              },
+              onTap: () => _go(context, const RetirementHomeDashboardPage()),
             ),
             _SidebarItem(
-              icon: Icons.group_outlined,
-              label: 'Residents',
-              selected: currentTitle == 'Residents',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ResidentsPage(),
-                  ),
-                );
-              },
+              icon: Icons.monitor_heart_outlined,
+              label: 'Elders monitoring',
+              selected: currentTitle == 'Elders monitoring',
+              onTap: () => _go(context, const EldersMonitoringPage()),
             ),
             _SidebarItem(
-              icon: Icons.assignment_outlined,
-              label: 'Care requests',
-              selected: currentTitle == 'Care requests',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const CareRequestsPage(),
-                  ),
-                );
-              },
+              icon: Icons.groups_outlined,
+              label: 'Caregivers',
+              selected: currentTitle == 'Caregivers',
+              onTap: () => _go(context, const CaregiversPage()),
+            ),
+            _SidebarItem(
+              icon: Icons.event_outlined,
+              label: 'Visits',
+              selected: currentTitle == 'Visits',
+              onTap: () => _go(context, const VisitsPage()),
+            ),
+            _SidebarItem(
+              icon: Icons.warning_amber_outlined,
+              label: 'Center',
+              selected: currentTitle == 'Center',
+              onTap: () => _go(context, const CenterPage()),
+            ),
+            _SidebarItem(
+              icon: Icons.payments_outlined,
+              label: 'Finance',
+              selected: currentTitle == 'Finance',
+              onTap: () => _go(context, const FinancePage()),
             ),
           ],
         ),
@@ -204,8 +202,7 @@ class _SidebarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textColor =
-        selected ? AppTheme.denim : AppTheme.deepNavy.withOpacity(0.8);
+    final textColor = selected ? AppTheme.denim : AppTheme.deepNavy.withOpacity(0.8);
 
     return Material(
       color: selected ? AppTheme.sage.withOpacity(0.25) : Colors.transparent,
@@ -222,8 +219,7 @@ class _SidebarItem extends StatelessWidget {
                   label,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: textColor,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w400,
+                        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                       ),
                 ),
               ),

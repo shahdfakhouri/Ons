@@ -9,9 +9,6 @@ import 'package:ons_app/screens/caregiver/upcoming_visits_page.dart';
 import 'package:ons_app/screens/caregiver/assigned_elders_page.dart';
 import 'package:ons_app/screens/caregiver/caregiver_health_logs_page.dart';
 import 'package:ons_app/screens/caregiver/caregiver_payments_page.dart';
-import 'package:ons_app/screens/caregiver/caregiver_messages_page.dart';
-
-
 
 class CaregiverLayout extends StatelessWidget {
   final String title;
@@ -216,31 +213,12 @@ class _CaregiverSidebar extends StatelessWidget {
                 );
               },
             ),
-          _SidebarItem(
-  icon: Icons.chat_bubble_outline,
-  label: 'Messages',
-  selected: currentTitle == 'Messages',
-  onTap: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const CaregiverMessagesPage(),
-      ),
-    );
-  },
-),
- 
-
-
-
-            
           ],
         ),
       ),
     );
   }
 }
-
 
 class _SidebarItem extends StatelessWidget {
   final IconData icon;
@@ -257,8 +235,7 @@ class _SidebarItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textColor =
-        selected ? AppTheme.denim : AppTheme.deepNavy.withOpacity(0.8);
+    final textColor = selected ? AppTheme.denim : AppTheme.deepNavy.withOpacity(0.8);
 
     return Material(
       color: selected ? AppTheme.sage.withOpacity(0.25) : Colors.transparent,
@@ -275,8 +252,7 @@ class _SidebarItem extends StatelessWidget {
                   label,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: textColor,
-                        fontWeight:
-                            selected ? FontWeight.w600 : FontWeight.w400,
+                        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                       ),
                 ),
               ),
