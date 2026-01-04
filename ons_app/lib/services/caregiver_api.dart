@@ -1,195 +1,281 @@
-import 'package:dio/dio.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+
+import 'package:ons_app/core/constants/api_config.dart';
+import 'package:ons_app/services/auth_service.dart';
 
 class CaregiverApi {
-  final Dio dio;
-  static const String _base = '/api/caregiver';
+  final http.Client _client;
+  CaregiverApi({http.Client? client}) : _client = client ?? http.Client();
 
-  CaregiverApi(this.dio);
+  Map<String, String> _headers() {
+    final token = AuthService().token;
+    return {
+      'Content-Type': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
 
-  // 1) dashboard + profile
+  Uri _url(String path) => Uri.parse('${ApiConfig.caregiverBase}$path');
+
+  void _throwIfBad(http.Response res) {
+    if (res.statusCode >= 200 && res.statusCode < 300) return;
+    throw Exception('HTTP ${res.statusCode}: ${res.body}');
+  }
+
+  Future<Map<String, dynamic>> get(String path, {Map<String, String>? queryParams}) async {
+    var uri = _url(path);
+    if (queryParams != null && queryParams.isNotEmpty) {
+      uri = uri.replace(queryParameters: queryParams);
+    }
+    final res = await _client.get(uri, headers: _headers());
+    _throwIfBad(res);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> put(String path, {Object? body}) async {
+    final res = await _client.put(
+      _url(path),
+      headers: _headers(),
+      body: jsonEncode(body ?? {}),
+    );
+    _throwIfBad(res);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> post(String path, {Object? body}) async {
+    final res = await _client.post(
+      _url(path),
+      headers: _headers(),
+      body: jsonEncode(body ?? {}),
+    );
+    _throwIfBad(res);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  // =======================
+  // ✅ DASHBOARD + PROFILE
+  // =======================
+
   Future<Map<String, dynamic>> getDashboard() async {
-    final res = await dio.get('$_base/dashboard');
-    return Map<String, dynamic>.from(res.data);
+    return await get('/dashboard');
   }
 
   Future<Map<String, dynamic>> getMyProfile() async {
-    final res = await dio.get('$_base/me');
-    return Map<String, dynamic>.from(res.data);
+    final j = await get('/me');
+    return (j['profile'] as Map<String, dynamic>?) ?? {};
   }
 
   Future<void> updateProfile(Map<String, dynamic> body) async {
-    await dio.put('$_base/me', data: body);
+    await put('/me', body: body);
   }
 
-  Future<Map<String, dynamic>> getElderStatus(int elderId) async {
-    final res = await dio.get('$_base/elders/$elderId/status');
-    return Map<String, dynamic>.from(res.data);
-  }
+  // =======================
+  // ✅ ASSIGNED ELDERS
+  // =======================
 
-  // 2) assigned elders
   Future<List<Map<String, dynamic>>> getAssignedElders() async {
-    final res = await dio.get('$_base/elders');
-    final list = (res.data['elders'] as List?) ?? [];
+    final j = await get('/elders');
+    final list = (j['elders'] as List?) ?? [];
     return list.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   Future<Map<String, dynamic>> getElderDetails(int elderId) async {
-    final res = await dio.get('$_base/elders/$elderId');
-    return Map<String, dynamic>.from(res.data['elder'] ?? {});
+    final j = await get('/elders/$elderId');
+    return (j['elder'] as Map<String, dynamic>?) ?? {};
   }
 
-  // 3) health logging & history
-  Future<void> createHealthLog(int elderId, Map<String, dynamic> body) async {
-    await dio.post('$_base/elders/$elderId/health-log', data: body);
+  Future<Map<String, dynamic>> getElderStatus(int elderId) async {
+    final j = await get('/elders/$elderId/status');
+    return (j['status'] as Map<String, dynamic>?) ?? {};
   }
 
-  Future<List<Map<String, dynamic>>> getHealthLogs(int elderId, {int limit = 50}) async {
-    final res = await dio.get(
-      '$_base/elders/$elderId/health-logs',
-      queryParameters: {'limit': limit},
-    );
-    final list = (res.data['logs'] as List?) ?? [];
+  // =======================
+  // ✅ HEALTH LOGS
+  // =======================
+
+  Future<Map<String, dynamic>> logElderHealth(int elderId, Map<String, dynamic> body) async {
+    return await post('/elders/$elderId/health-log', body: body);
+  }
+
+  Future<List<Map<String, dynamic>>> getElderHealthLogs(int elderId, {int? limit}) async {
+    final queryParams = <String, String>{};
+    if (limit != null) queryParams['limit'] = limit.toString();
+    final j = await get('/elders/$elderId/health-logs', queryParams: queryParams.isEmpty ? null : queryParams);
+    final list = (j['logs'] as List?) ?? [];
     return list.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
-  // alerts
-  Future<List<Map<String, dynamic>>> getMyAlerts() async {
-    final res = await dio.get('$_base/alerts');
-    final list = (res.data['alerts'] as List?) ?? [];
-    return list.map((e) => Map<String, dynamic>.from(e)).toList();
-  }
+  // =======================
+  // ✅ MEDICATIONS
+  // =======================
 
-  Future<List<Map<String, dynamic>>> getElderAlerts(int elderId) async {
-    final res = await dio.get('$_base/elders/$elderId/alerts');
-    final list = (res.data['alerts'] as List?) ?? [];
-    return list.map((e) => Map<String, dynamic>.from(e)).toList();
-  }
-
-  // 4) medication (read-only here, since your controller snippet doesn’t show a POST log endpoint)
-  Future<List<Map<String, dynamic>>> getMedicationPlan(int elderId) async {
-    final res = await dio.get('$_base/elders/$elderId/medications');
-    final list = (res.data['medications'] as List?) ?? [];
+  Future<List<Map<String, dynamic>>> getElderMedicationPlan(int elderId) async {
+    final j = await get('/elders/$elderId/medications');
+    final list = (j['medications'] as List?) ?? [];
     return list.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   Future<List<Map<String, dynamic>>> getTodayMedicationChecklist(int elderId) async {
-    final res = await dio.get('$_base/elders/$elderId/medications/today');
-    final list = (res.data['checklist'] as List?) ?? [];
+    final j = await get('/elders/$elderId/medications/today');
+    final list = (j['checklist'] as List?) ?? [];
     return list.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   Future<List<Map<String, dynamic>>> getMedicationLogs(int elderId, {String? date}) async {
-    final res = await dio.get(
-      '$_base/elders/$elderId/medication-logs',
-      queryParameters: {'date': date},
-    );
-    final list = (res.data['logs'] as List?) ?? [];
+    final queryParams = <String, String>{};
+    if (date != null) queryParams['date'] = date;
+    final j = await get('/elders/$elderId/medication-logs', queryParams: queryParams.isEmpty ? null : queryParams);
+    final list = (j['logs'] as List?) ?? [];
     return list.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
-  Future<Map<String, dynamic>> getMedicationStats(int elderId, {int days = 7}) async {
-    final res = await dio.get(
-      '$_base/elders/$elderId/medications/stats',
-      queryParameters: {'days': days},
-    );
-    return Map<String, dynamic>.from(res.data);
+  Future<Map<String, dynamic>> getMedicationStats(int elderId, {int? days}) async {
+    final queryParams = <String, String>{};
+    if (days != null) queryParams['days'] = days.toString();
+    return await get('/elders/$elderId/medications/stats', queryParams: queryParams.isEmpty ? null : queryParams);
   }
 
-  // 5) daily summary
+  // =======================
+  // ✅ DAILY SUMMARY
+  // =======================
+
   Future<void> upsertDailySummary(int elderId, Map<String, dynamic> body) async {
-    await dio.post('$_base/elders/$elderId/daily-summary', data: body);
+    await post('/elders/$elderId/daily-summary', body: body);
   }
 
   Future<Map<String, dynamic>?> getDailySummary(int elderId) async {
-    final res = await dio.get('$_base/elders/$elderId/daily-summary');
-    final summary = res.data['summary'];
+    final j = await get('/elders/$elderId/daily-summary');
+    final summary = j['summary'];
     if (summary == null) return null;
     return Map<String, dynamic>.from(summary);
   }
 
-  // 6) incidents
-  Future<void> createIncident(int elderId, Map<String, dynamic> body) async {
-    await dio.post('$_base/elders/$elderId/incidents', data: body);
+  // =======================
+  // ✅ INCIDENTS
+  // =======================
+
+  Future<Map<String, dynamic>> createIncident(int elderId, Map<String, dynamic> body) async {
+    return await post('/elders/$elderId/incidents', body: body);
   }
 
   Future<List<Map<String, dynamic>>> getMyIncidents() async {
-    final res = await dio.get('$_base/incidents');
-    final list = (res.data['incidents'] as List?) ?? [];
+    final j = await get('/incidents');
+    final list = (j['incidents'] as List?) ?? [];
     return list.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   Future<Map<String, dynamic>> getIncidentById(int incidentId) async {
-    final res = await dio.get('$_base/incidents/$incidentId');
-    return Map<String, dynamic>.from(res.data['incident'] ?? {});
+    final j = await get('/incidents/$incidentId');
+    return (j['incident'] as Map<String, dynamic>?) ?? {};
   }
 
   Future<void> updateIncidentStatus(int incidentId, String status) async {
-    await dio.put('$_base/incidents/$incidentId/status', data: {'status': status});
+    await put('/incidents/$incidentId/status', body: {'status': status});
   }
 
-  // 7) checkin + location
-  Future<void> checkIn(int elderId) async {
-    await dio.post('$_base/elders/$elderId/checkin');
+  // =======================
+  // ✅ CHECK-IN + LOCATION
+  // =======================
+
+  Future<void> checkInElder(int elderId) async {
+    await post('/elders/$elderId/checkin');
   }
 
-  Future<void> updateLocation(int elderId, {required double latitude, required double longitude}) async {
-    await dio.post('$_base/elders/$elderId/location', data: {
+  Future<void> updateElderLocation(int elderId, {required double latitude, required double longitude}) async {
+    await post('/elders/$elderId/location', body: {
       'latitude': latitude,
       'longitude': longitude,
     });
   }
 
-  Future<List<Map<String, dynamic>>> getLocationHistory(int elderId, {int limit = 100}) async {
-    final res = await dio.get(
-      '$_base/elders/$elderId/location/history',
-      queryParameters: {'limit': limit},
-    );
-    final list = (res.data['history'] as List?) ?? [];
+  Future<List<Map<String, dynamic>>> getElderLocationHistory(int elderId, {int? limit}) async {
+    final queryParams = <String, String>{};
+    if (limit != null) queryParams['limit'] = limit.toString();
+    final j = await get('/elders/$elderId/location/history', queryParams: queryParams.isEmpty ? null : queryParams);
+    final list = (j['history'] as List?) ?? [];
     return list.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
-  // 8) shifts
-  Future<void> startShift({String? notes}) async {
-    await dio.post('$_base/shifts/start', data: {'notes': notes});
+  // =======================
+  // ✅ SHIFTS
+  // =======================
+
+  Future<Map<String, dynamic>> startMyShift({String? notes}) async {
+    return await post('/shifts/start', body: notes != null ? {'notes': notes} : null);
   }
 
-  Future<void> endShift({String? notes}) async {
-    await dio.post('$_base/shifts/end', data: {'notes': notes});
+  Future<void> endMyShift({String? notes}) async {
+    await post('/shifts/end', body: notes != null ? {'notes': notes} : null);
   }
 
-  Future<Map<String, dynamic>?> getActiveShift() async {
-    final res = await dio.get('$_base/shifts/active');
-    final s = res.data['active_shift'];
-    if (s == null) return null;
-    return Map<String, dynamic>.from(s);
+  Future<Map<String, dynamic>?> getMyActiveShift() async {
+    final j = await get('/shifts/active');
+    final shift = j['active_shift'];
+    if (shift == null) return null;
+    return Map<String, dynamic>.from(shift);
   }
 
-  Future<List<Map<String, dynamic>>> getShiftHistory({int limit = 30}) async {
-    final res = await dio.get('$_base/shifts/history', queryParameters: {'limit': limit});
-    final list = (res.data['shifts'] as List?) ?? [];
+  Future<List<Map<String, dynamic>>> getMyShiftHistory({int? limit}) async {
+    final queryParams = <String, String>{};
+    if (limit != null) queryParams['limit'] = limit.toString();
+    final j = await get('/shifts/history', queryParams: queryParams.isEmpty ? null : queryParams);
+    final list = (j['shifts'] as List?) ?? [];
     return list.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
-  // 9) visits + family contacts
-  Future<List<Map<String, dynamic>>> getUpcomingVisits({int limit = 50}) async {
-    final res = await dio.get('$_base/visits/upcoming', queryParameters: {'limit': limit});
-    final list = (res.data['visits'] as List?) ?? [];
+  // =======================
+  // ✅ ALERTS
+  // =======================
+
+  Future<List<Map<String, dynamic>>> getMyAlerts() async {
+    final j = await get('/alerts');
+    final list = (j['alerts'] as List?) ?? [];
     return list.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
-  Future<List<Map<String, dynamic>>> getElderUpcomingVisits(int elderId, {int limit = 50}) async {
-    final res = await dio.get('$_base/elders/$elderId/visits/upcoming', queryParameters: {'limit': limit});
-    final list = (res.data['visits'] as List?) ?? [];
+  Future<List<Map<String, dynamic>>> getElderAlerts(int elderId) async {
+    final j = await get('/elders/$elderId/alerts');
+    final list = (j['alerts'] as List?) ?? [];
     return list.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
-  Future<List<Map<String, dynamic>>> getFamilyContacts(int elderId) async {
-    final res = await dio.get('$_base/elders/$elderId/family-contacts');
-    final list = (res.data['family'] as List?) ?? [];
+  // =======================
+  // ✅ VISITS + FAMILY CONTACTS
+  // =======================
+
+  Future<List<Map<String, dynamic>>> getMyUpcomingVisits({
+    int? limit,
+    String? from,
+    String? to,
+    String? status,
+  }) async {
+    final queryParams = <String, String>{};
+    if (limit != null) queryParams['limit'] = limit.toString();
+    if (from != null) queryParams['from'] = from;
+    if (to != null) queryParams['to'] = to;
+    if (status != null && status != 'all') queryParams['status'] = status;
+    final j = await get('/visits/upcoming', queryParams: queryParams.isEmpty ? null : queryParams);
+    final list = (j['visits'] as List?) ?? [];
     return list.map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
-  Future<void> requestVisit(int elderId, Map<String, dynamic> body) async {
-    await dio.post('$_base/elders/$elderId/visits/request', data: body);
+  Future<List<Map<String, dynamic>>> getElderUpcomingVisits(int elderId, {int? limit, String? status}) async {
+    final queryParams = <String, String>{};
+    if (limit != null) queryParams['limit'] = limit.toString();
+    if (status != null && status != 'all') queryParams['status'] = status;
+    final j = await get('/elders/$elderId/visits/upcoming', queryParams: queryParams.isEmpty ? null : queryParams);
+    final list = (j['visits'] as List?) ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getElderFamilyContacts(int elderId) async {
+    final j = await get('/elders/$elderId/family-contacts');
+    final list = (j['family'] as List?) ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<Map<String, dynamic>> requestVisit(int elderId, Map<String, dynamic> body) async {
+    return await post('/elders/$elderId/visits/request', body: body);
   }
 }
