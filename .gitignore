@@ -15,3 +15,8 @@ ons_app/.dart_tool/
 
 # VS Code (optional - recommended)
 .vscode/
+
+
+Local MySQL - ons.session.sql
+tatus
+*.session.sql
