@@ -1,232 +1,205 @@
 import 'package:flutter/material.dart';
-import 'package:ons_app/core/theme/app_theme.dart';
-import 'package:ons_app/services/auth_service.dart';
-import 'package:ons_app/screens/auth/login_page.dart';
 
-import 'retirement_home_dashboard.dart';
-import 'elders_monitoring_page.dart';
-import 'caregivers_page.dart';
-import 'center_page.dart';
-import 'finance_page.dart';
-import 'visits_page.dart';
+import 'pages/dashboard_page.dart';
+import 'pages/caregivers_page.dart';
+import 'pages/assignments_page.dart';
+import 'pages/elders_page.dart';
+import 'pages/alerts_page.dart';
+import 'pages/emergencies_page.dart';
+import 'pages/shifts_page.dart';
+import 'pages/daily_summaries_page.dart';
+import 'pages/payments_page.dart';
+import 'pages/transactions_page.dart';
+import 'pages/incidents_page.dart';
 
-class RetirementHomeLayout extends StatelessWidget {
-  final String title;
-  final Widget child;
-
-  const RetirementHomeLayout({
-    super.key,
-    required this.title,
-    required this.child,
-  });
-
-  void _logout(BuildContext context) {
-    AuthService().logout();
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => false,
-    );
-  }
+class RetirementHomeLayout extends StatefulWidget {
+  final int initialIndex;
+  const RetirementHomeLayout({super.key, this.initialIndex = 0});
 
   @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return Scaffold(
-      backgroundColor: AppTheme.cream,
-      appBar: AppBar(
-        backgroundColor: AppTheme.cream,
-        elevation: 0,
-        titleSpacing: 24,
-        title: Row(
-          children: [
-            Text(
-              'Ons Home',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: AppTheme.deepNavy,
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(width: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppTheme.sage.withOpacity(0.25),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.home_work_outlined, size: 18, color: AppTheme.denim),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Retirement home',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppTheme.deepNavy,
-                          fontWeight: FontWeight.w600,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Profile (later)',
-            onPressed: () {},
-            icon: const Icon(Icons.person_outline),
-            color: colors.onSurface,
-          ),
-          TextButton.icon(
-            onPressed: () => _logout(context),
-            icon: const Icon(Icons.logout, size: 18),
-            label: const Text('Logout'),
-            style: TextButton.styleFrom(foregroundColor: AppTheme.deepNavy),
-          ),
-          const SizedBox(width: 16),
-        ],
-      ),
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _HomeSidebar(currentTitle: title),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: AppTheme.deepNavy,
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  const SizedBox(height: 16),
-                  Expanded(child: child),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  State<RetirementHomeLayout> createState() => _RetirementHomeLayoutState();
 }
 
-class _HomeSidebar extends StatelessWidget {
-  final String currentTitle;
+class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
+  late int _index;
 
-  const _HomeSidebar({required this.currentTitle});
+  static const _titles = [
+    'Dashboard',
+    'Caregivers',
+    'Assignments',
+    'Elders',
+    'Alerts',
+    'Emergencies',
+    'Shifts',
+    'Daily Summaries',
+    'Payments',
+    'Transactions',
+    'Incidents',
+  ];
 
-  void _go(BuildContext context, Widget page) {
-    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => page));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 240,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 16, 0, 16),
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.9),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            _SidebarItem(
-              icon: Icons.dashboard_outlined,
-              label: 'Dashboard',
-              selected: currentTitle == 'Dashboard',
-              onTap: () => _go(context, const RetirementHomeDashboardPage()),
-            ),
-            _SidebarItem(
-              icon: Icons.monitor_heart_outlined,
-              label: 'Elders monitoring',
-              selected: currentTitle == 'Elders monitoring',
-              onTap: () => _go(context, const EldersMonitoringPage()),
-            ),
-            _SidebarItem(
-              icon: Icons.groups_outlined,
-              label: 'Caregivers',
-              selected: currentTitle == 'Caregivers',
-              onTap: () => _go(context, const CaregiversPage()),
-            ),
-            _SidebarItem(
-              icon: Icons.event_outlined,
-              label: 'Visits',
-              selected: currentTitle == 'Visits',
-              onTap: () => _go(context, const VisitsPage()),
-            ),
-            _SidebarItem(
-              icon: Icons.warning_amber_outlined,
-              label: 'Center',
-              selected: currentTitle == 'Center',
-              onTap: () => _go(context, const CenterPage()),
-            ),
-            _SidebarItem(
-              icon: Icons.payments_outlined,
-              label: 'Finance',
-              selected: currentTitle == 'Finance',
-              onTap: () => _go(context, const FinancePage()),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SidebarItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _SidebarItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
+  final _pages = const [
+    RetirementDashboardPage(),
+    RetirementCaregiversPage(),
+    RetirementAssignmentsPage(),
+    RetirementEldersPage(),
+    RetirementAlertsPage(),
+    RetirementEmergenciesPage(),
+    RetirementShiftsPage(),
+    RetirementDailySummariesPage(),
+    RetirementPaymentsPage(),
+    RetirementTransactionsPage(),
+    RetirementIncidentsPage(),
+  ];
 
   @override
-  Widget build(BuildContext context) {
-    final textColor = selected ? AppTheme.denim : AppTheme.deepNavy.withOpacity(0.8);
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex.clamp(0, _pages.length - 1);
+  }
 
-    return Material(
-      color: selected ? AppTheme.sage.withOpacity(0.25) : Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
+  void _goTo(int i) {
+    setState(() => _index = i);
+    // close drawer if open (mobile)
+    if (Navigator.canPop(context)) Navigator.pop(context);
+  }
+
+  Widget _nav(ColorScheme cs) {
+    return NavigationDrawer(
+      selectedIndex: _index,
+      onDestinationSelected: _goTo,
+      children: [
+        const SizedBox(height: 8),
+        Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            children: [
-              Icon(icon, size: 20, color: textColor),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: textColor,
-                        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                      ),
+          child: Text(
+            'Retirement Home',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: cs.onSurface,
                 ),
-              ),
-            ],
           ),
         ),
-      ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'Current: ${_titles[_index]}',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurface.withOpacity(0.7),
+                ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Divider(height: 1),
+
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.dashboard_outlined),
+          selectedIcon: Icon(Icons.dashboard),
+          label: Text('Dashboard'),
+        ),
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.badge_outlined),
+          selectedIcon: Icon(Icons.badge),
+          label: Text('Caregivers'),
+        ),
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.link_outlined),
+          selectedIcon: Icon(Icons.link),
+          label: Text('Assignments'),
+        ),
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.people_outline),
+          selectedIcon: Icon(Icons.people),
+          label: Text('Elders'),
+        ),
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.notifications_none),
+          selectedIcon: Icon(Icons.notifications),
+          label: Text('Alerts'),
+        ),
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.warning_amber_outlined),
+          selectedIcon: Icon(Icons.warning),
+          label: Text('Emergencies'),
+        ),
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.schedule_outlined),
+          selectedIcon: Icon(Icons.schedule),
+          label: Text('Shifts'),
+        ),
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.today_outlined),
+          selectedIcon: Icon(Icons.today),
+          label: Text('Summaries'),
+        ),
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.payments_outlined),
+          selectedIcon: Icon(Icons.payments),
+          label: Text('Payments'),
+        ),
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.receipt_long_outlined),
+          selectedIcon: Icon(Icons.receipt_long),
+          label: Text('Transactions'),
+        ),
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.report_gmailerrorred_outlined),
+          selectedIcon: Icon(Icons.report),
+          label: Text('Incidents'),
+        ),
+
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return LayoutBuilder(
+      builder: (context, c) {
+        final isWide = c.maxWidth >= 900;
+
+        if (isWide) {
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(_titles[_index]),
+              backgroundColor: cs.surface,
+              foregroundColor: cs.onSurface,
+              elevation: 0,
+            ),
+            body: Row(
+              children: [
+                SizedBox(width: 280, child: _nav(cs)),
+                const VerticalDivider(width: 1),
+
+                // centered content on web
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1100),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: _pages[_index],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+
+        // Mobile: hamburger drawer
+        return Scaffold(
+          appBar: AppBar(title: Text(_titles[_index])),
+          drawer: Drawer(child: SafeArea(child: _nav(cs))),
+          body: Padding(
+            padding: const EdgeInsets.all(12),
+            child: _pages[_index],
+          ),
+        );
+      },
     );
   }
 }

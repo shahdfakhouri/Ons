@@ -6,7 +6,7 @@ import 'package:ons_app/core/theme/app_theme.dart';
 import 'package:ons_app/screens/home/home_page.dart';
 import 'package:ons_app/screens/auth/login_page.dart';
 import 'package:ons_app/screens/admin/admin_dashboard.dart';
-import 'package:ons_app/screens/caregiver/caregiver_dashboard.dart';
+import 'package:ons_app/screens/caregiver/caregiver_layout.dart';
 
 void main() {
   runApp(const OnsApp());
@@ -31,8 +31,8 @@ class OnsApp extends StatelessWidget {
         '/login': (_) => const LoginPage(),
 
         // dashboards by role
-        '/admin/dashboard': (_) => const AdminDashboardPage(),
-        '/caregiver/dashboard': (_) => const CaregiverDashboardPage(),
+       ///admin/dashboard': (_) => const AdminDashboardPage(),
+       ///caregiver/dashboard': (_) => const CaregiverLayout(), 
 
         // later you can add:
         // '/family/dashboard': (_) => const FamilyDashboardPage(),
