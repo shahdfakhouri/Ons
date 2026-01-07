@@ -2,6 +2,10 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const db = require("./src/config/db");
+const connectMongo = require("./src/config/mongo");
+const companionRoutes = require("./src/routes/companion.routes");
+
+
 
 // Import routes
 const authRoutes = require("./src/routes/auth.routes");
@@ -22,6 +26,9 @@ const publicRoutes = require("./src/routes/public.routes");
 
 const path = require("path");
 const app = express();
+
+connectMongo();
+
 
 //match 
 const matchRoutes = require("./src/routes/match.routes");
@@ -74,3 +81,5 @@ app.use("/api/payments", paymentRoutes);
 //transaction
 const transactionRoutes = require("./src/routes/transaction.routes");
 app.use("/api/transactions", transactionRoutes);
+
+app.use("/api/companion", companionRoutes);
