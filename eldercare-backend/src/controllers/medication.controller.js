@@ -200,3 +200,136 @@ exports.getMedicationLogs = async (req, res) => {
     res.status(500).json({ msg: "Server error", error: error.message });
   }
 };
+// Elder controller
+exports.getElderTodaySchedule = (req, res) => {
+  const elder_id = req.user.elder_id;
+
+  db.query(
+    `SELECT
+      m.medication_id,
+      m.name,
+      m.dosage,
+      m.frequency,
+      m.instructions,
+      m.active,
+      m.start_date,
+      m.end_date,
+
+      ml.status AS today_status,
+      ml.taken_at AS today_taken_at,
+      ml.scheduled_time AS today_scheduled_time
+
+     FROM medications m
+     LEFT JOIN medication_logs ml
+       ON ml.medication_id = m.medication_id
+      AND ml.elder_id = m.elder_id
+      AND DATE(ml.created_at) = CURDATE()
+
+     WHERE m.elder_id = ?
+       AND m.active = 1
+       AND (m.start_date IS NULL OR m.start_date <= CURDATE())
+       AND (m.end_date IS NULL OR m.end_date >= CURDATE())
+     ORDER BY m.created_at DESC`,
+    [elder_id],
+    (err, rows) => {
+      if (err) {
+        console.error("Today meds DB error:", err);
+        return res.status(500).json({ msg: "DB error", details: err.message });
+      }
+
+      // normalize the checkbox flag
+      const formatted = rows.map(r => ({
+        medication_id: r.medication_id,
+        name: r.name,
+        dosage: r.dosage,
+        frequency: r.frequency,
+        instructions: r.instructions,
+        scheduled_time: r.today_scheduled_time,
+        status: r.today_status || "pending",
+        taken: r.today_status === "taken",
+        taken_at: r.today_taken_at
+      }));
+
+      res.json(formatted);
+    }
+  );
+};
+exports.getElderMedicationHistory = (req, res) => {
+  const elder_id = req.user.elder_id;
+
+  db.query(
+    `SELECT
+      ml.log_id,
+      ml.medication_id,
+      m.name,
+      m.dosage,
+      ml.status,
+      ml.scheduled_time,
+      ml.taken_at,
+      ml.notes,
+      ml.created_at
+     FROM medication_logs ml
+     JOIN medications m ON m.medication_id = ml.medication_id
+     WHERE ml.elder_id = ?
+     ORDER BY ml.created_at DESC
+     LIMIT 200`,
+    [elder_id],
+    (err, rows) => {
+      if (err) {
+        console.error("Medication history DB error:", err);
+        return res.status(500).json({ msg: "DB error", details: err.message });
+      }
+
+      res.json(rows);
+    }
+  );
+};
+exports.confirmElderMedicationTaken = (req, res) => {
+  const elder_id = req.user.elder_id;
+  const { medication_id, scheduled_time, notes } = req.body;
+
+  if (!medication_id) {
+    return res.status(400).json({ msg: "medication_id is required" });
+  }
+
+  // 1) check already logged today
+  db.query(
+    `SELECT log_id
+     FROM medication_logs
+     WHERE elder_id = ?
+       AND medication_id = ?
+       AND DATE(created_at) = CURDATE()
+       AND status = 'taken'
+     LIMIT 1`,
+    [elder_id, medication_id],
+    (err, rows) => {
+      if (err) {
+        console.error("Confirm check DB error:", err);
+        return res.status(500).json({ msg: "DB error", details: err.message });
+      }
+
+      if (rows.length) {
+        return res.json({ msg: "Already confirmed today" });
+      }
+
+      // 2) insert taken log
+      db.query(
+        `INSERT INTO medication_logs
+          (medication_id, elder_id, scheduled_time, status, taken_at, notes)
+         VALUES (?, ?, ?, 'taken', NOW(), ?)`,
+        [medication_id, elder_id, scheduled_time || null, notes || null],
+        (err2, result) => {
+          if (err2) {
+            console.error("Confirm insert DB error:", err2);
+            return res.status(500).json({ msg: "DB error", details: err2.message });
+          }
+
+          res.status(201).json({
+            msg: "Medication confirmed as taken",
+            log_id: result.insertId
+          });
+        }
+      );
+    }
+  );
+};

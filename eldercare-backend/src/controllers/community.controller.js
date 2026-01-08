@@ -2,30 +2,27 @@ const db = require("../config/db");
 
 // 📝 Create a new community post (elder only)
 exports.createPost = (req, res) => {
-  const userId = req.user.id;          // elder_id from JWT
-  const role = req.user.role;
+  const elder_id = req.user.elder_id;      // ✅ correct
+  const role = (req.user.role || "").toLowerCase();
 
-  if (role.toLowerCase() !== "elder") {
-    return res
-      .status(403)
-      .json({ msg: "Only elders can create community posts." });
+  if (role !== "elder") {
+    return res.status(403).json({ msg: "Only elders can create community posts." });
   }
 
   const { title, content, category } = req.body;
-
   if (!title || !content) {
     return res.status(400).json({ msg: "Title and content are required." });
   }
 
   const sql = `
     INSERT INTO community_posts (user_id, title, content, category, is_approved)
-    VALUES (?, ?, ?, ?, 0)   -- pending until admin approves
+    VALUES (?, ?, ?, ?, 0)
   `;
 
-  db.query(sql, [userId, title, content, category || null], (err, result) => {
+  db.query(sql, [elder_id, title, content, category || null], (err, result) => {
     if (err) {
       console.error("Error creating post:", err);
-      return res.status(500).json({ msg: "Error creating post", err });
+      return res.status(500).json({ msg: "Error creating post", details: err.message });
     }
 
     res.status(201).json({
@@ -34,6 +31,7 @@ exports.createPost = (req, res) => {
     });
   });
 };
+
 
 // 📜 Get all posts (elders/family see only approved, admin can see all)
 exports.getAllPosts = (req, res) => {
@@ -87,117 +85,51 @@ exports.getAllPosts = (req, res) => {
 
 // 🔍 Get one post with its comments
 exports.getPostById = (req, res) => {
-  const role = req.user.role;
-  const { post_id } = req.params;
+  const post_id = Number(req.params.post_id);
+  const elder_id = req.user.elder_id;
 
-  // 1) Get the post
-  let postSql = `
-  SELECT 
-    p.post_id,
-    p.title,
-    p.content,
-    p.category,
-    p.created_at,
-    p.is_approved,
-    e.name AS author_name
-  FROM community_posts p
-  JOIN elders e ON p.user_id = e.elder_id
-  WHERE p.post_id = ?
-`;
+  db.query(
+    `SELECT post_id, user_id, title, content, category, created_at, is_approved
+     FROM community_posts
+     WHERE post_id = ?
+       AND (is_approved = 1 OR user_id = ?)`,
+    [post_id, elder_id],
+    (err, postRows) => {
+      if (err) return res.status(500).json({ msg: "DB error", details: err.message });
+      if (!postRows.length) return res.status(404).json({ msg: "Post not found" });
 
-
-  const params = [post_id];
-
-  // Non-admins must not see unapproved posts
-  if (role.toLowerCase() !== "admin") {
-    postSql += " AND p.is_approved = 1";
-  }
-
-  db.query(postSql, params, (err, postRows) => {
-    if (err) {
-      console.error("Error fetching post:", err);
-      return res.status(500).json({ msg: "Error fetching post", err });
+      db.query(
+        `SELECT comment_id, user_id, comment, created_at
+         FROM community_comments
+         WHERE post_id = ?
+         ORDER BY created_at ASC`,
+        [post_id],
+        (err2, commentRows) => {
+          if (err2) return res.status(500).json({ msg: "DB error", details: err2.message });
+          res.json({ post: postRows[0], comments: commentRows });
+        }
+      );
     }
-    if (!postRows.length) {
-      return res.status(404).json({ msg: "Post not found" });
-    }
-
-    const post = postRows[0];
-
-    // 2) Get comments
-    const commentsSql = `
-      SELECT 
-        c.comment_id,
-        c.comment,
-        c.created_at,
-        e.name AS author_name
-      FROM community_comments c
-      JOIN elders e ON c.user_id = e.elder_id
-      WHERE c.post_id = ?
-      ORDER BY c.created_at ASC
-    `;
-
-    db.query(commentsSql, [post_id], (err2, comments) => {
-      if (err2) {
-        console.error("Error fetching comments:", err2);
-        return res.status(500).json({ msg: "Error fetching comments", err2 });
-      }
-
-      res.status(200).json({
-        msg: "Post with comments retrieved",
-        post,
-        comments,
-      });
-    });
-  });
+  );
 };
 
 // 💬 Add a comment to a post (elder only)
 exports.addComment = (req, res) => {
-  const userId = req.user.id; // elder_id
-  const role = req.user.role;
-  const { post_id } = req.params;
-  const { comment } = req.body;
+  const post_id = Number(req.params.post_id);
+  const elder_id = req.user.elder_id;
 
-  if (role.toLowerCase() !== "elder") {
-    return res
-      .status(403)
-      .json({ msg: "Only elders can comment in the community." });
-  }
+  const text = (req.body.content || req.body.comment || req.body.comment_text || "").trim();
+  if (!text) return res.status(400).json({ msg: "Comment text is required" });
 
-  if (!comment) {
-    return res.status(400).json({ msg: "Comment text is required" });
-  }
-
-  const checkSql = "SELECT is_approved FROM community_posts WHERE post_id = ?";
-  db.query(checkSql, [post_id], (err, rows) => {
-    if (err) {
-      console.error("Error checking post:", err);
-      return res.status(500).json({ msg: "Error checking post", err });
+  db.query(
+    `INSERT INTO community_comments (post_id, user_id, comment)
+     VALUES (?, ?, ?)`,
+    [post_id, elder_id, text],
+    (err, result) => {
+      if (err) return res.status(500).json({ msg: "DB error", details: err.message });
+      res.status(201).json({ msg: "Comment added", comment_id: result.insertId });
     }
-    if (!rows.length) {
-      return res.status(404).json({ msg: "Post not found" });
-    }
-    if (!rows[0].is_approved) {
-      return res.status(403).json({ msg: "Cannot comment on a post that is not approved yet" });
-    }
-
-    const sql = `
-      INSERT INTO community_comments (post_id, user_id, comment)
-      VALUES (?, ?, ?)
-    `;
-    db.query(sql, [post_id, userId, comment], (err2, result) => {
-      if (err2) {
-        console.error("Error adding comment:", err2);
-        return res.status(500).json({ msg: "Error adding comment", err2 });
-      }
-
-      res.status(201).json({
-        msg: "Comment added successfully ✅",
-        comment_id: result.insertId,
-      });
-    });
-  });
+  );
 };
 
 //
@@ -270,46 +202,129 @@ exports.hidePost = (req, res) => {
 };
 
 // 🗑️ Delete post + its comments
-exports.deletePost = (req, res) => {
-  const { post_id } = req.params;
+exports.deleteMyPost = (req, res) => {
+  const elder_id = req.user.elder_id;
+  const role = (req.user.role || "").toLowerCase();
+  const post_id = Number(req.params.post_id);
 
-  // delete comments first (FK)
-  const deleteCommentsSql = "DELETE FROM community_comments WHERE post_id = ?";
-  db.query(deleteCommentsSql, [post_id], (err) => {
-    if (err) {
-      console.error("Error deleting comments:", err);
-      return res.status(500).json({ msg: "Error deleting comments", err });
-    }
+  if (role !== "elder") return res.status(403).json({ msg: "Only elders can delete their posts." });
+  if (!post_id) return res.status(400).json({ msg: "Invalid post_id" });
 
-    const deletePostSql = "DELETE FROM community_posts WHERE post_id = ?";
-    db.query(deletePostSql, [post_id], (err2, result) => {
-      if (err2) {
-        console.error("Error deleting post:", err2);
-        return res.status(500).json({ msg: "Error deleting post", err2 });
+  // delete comments first
+  db.query("DELETE FROM community_comments WHERE post_id = ?", [post_id], (err) => {
+    if (err) return res.status(500).json({ msg: "Error deleting comments", details: err.message });
+
+    db.query(
+      "DELETE FROM community_posts WHERE post_id = ? AND user_id = ?",
+      [post_id, elder_id],
+      (err2, result) => {
+        if (err2) return res.status(500).json({ msg: "Error deleting post", details: err2.message });
+        if (!result.affectedRows) return res.status(404).json({ msg: "Post not found or not yours" });
+        res.status(200).json({ msg: "Post deleted ✅" });
       }
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ msg: "Post not found" });
-      }
-
-      res.status(200).json({ msg: "Post and its comments deleted 🗑️" });
-    });
+    );
   });
 };
 
 // 🗑️ Delete a single comment
-exports.deleteComment = (req, res) => {
-  const { comment_id } = req.params;
+exports.deleteMyComment = (req, res) => {
+  const elder_id = req.user.elder_id;
+  const role = (req.user.role || "").toLowerCase();
+  const comment_id = Number(req.params.comment_id);
 
-  const sql = "DELETE FROM community_comments WHERE comment_id = ?";
-  db.query(sql, [comment_id], (err, result) => {
-    if (err) {
-      console.error("Error deleting comment:", err);
-      return res.status(500).json({ msg: "Error deleting comment", err });
-    }
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ msg: "Comment not found" });
-    }
+  if (role !== "elder") return res.status(403).json({ msg: "Only elders can delete their comments." });
+  if (!comment_id) return res.status(400).json({ msg: "Invalid comment_id" });
 
-    res.status(200).json({ msg: "Comment deleted successfully ❎" });
+  db.query(
+    "DELETE FROM community_comments WHERE comment_id = ? AND user_id = ?",
+    [comment_id, elder_id],
+    (err, result) => {
+      if (err) return res.status(500).json({ msg: "Error deleting comment", details: err.message });
+      if (!result.affectedRows) return res.status(404).json({ msg: "Comment not found or not yours" });
+      res.status(200).json({ msg: "Comment deleted ✅" });
+    }
+  );
+};
+
+exports.reportPost = (req, res) => {
+  const elder_id = req.user.elder_id;
+  const role = (req.user.role || "").toLowerCase();
+  const post_id = Number(req.params.post_id);
+  const { reason } = req.body || {};
+
+  if (role !== "elder") return res.status(403).json({ msg: "Only elders can report." });
+  if (!post_id) return res.status(400).json({ msg: "Invalid post_id" });
+
+  db.query(
+    `INSERT INTO community_reports (reporter_elder_id, post_id, reason)
+     VALUES (?, ?, ?)`,
+    [elder_id, post_id, reason || null],
+    (err, result) => {
+      if (err) return res.status(500).json({ msg: "Failed to report post", details: err.message });
+      res.status(201).json({ msg: "Reported ✅", report_id: result.insertId });
+    }
+  );
+};
+
+exports.reportComment = (req, res) => {
+  const elder_id = req.user.elder_id;
+  const role = (req.user.role || "").toLowerCase();
+  const comment_id = Number(req.params.comment_id);
+  const { reason } = req.body || {};
+
+  if (role !== "elder") return res.status(403).json({ msg: "Only elders can report." });
+  if (!comment_id) return res.status(400).json({ msg: "Invalid comment_id" });
+
+  db.query(
+    `INSERT INTO community_reports (reporter_elder_id, comment_id, reason)
+     VALUES (?, ?, ?)`,
+    [elder_id, comment_id, reason || null],
+    (err, result) => {
+      if (err) return res.status(500).json({ msg: "Failed to report comment", details: err.message });
+      res.status(201).json({ msg: "Reported ✅", report_id: result.insertId });
+    }
+  );
+};
+
+exports.deleteMyPost = (req, res) => {
+  const elder_id = req.user.elder_id;
+  const role = (req.user.role || "").toLowerCase();
+  const post_id = Number(req.params.post_id);
+
+  if (role !== "elder") return res.status(403).json({ msg: "Only elders can delete their posts." });
+  if (!post_id) return res.status(400).json({ msg: "Invalid post_id" });
+
+  // delete comments first then post, but ONLY if owned by elder
+  db.query("DELETE FROM community_comments WHERE post_id = ?", [post_id], (err) => {
+    if (err) return res.status(500).json({ msg: "Error deleting comments", err });
+
+    db.query(
+      "DELETE FROM community_posts WHERE post_id = ? AND user_id = ?",
+      [post_id, elder_id],
+      (err2, result) => {
+        if (err2) return res.status(500).json({ msg: "Error deleting post", err2 });
+        if (!result.affectedRows) return res.status(404).json({ msg: "Post not found or not yours" });
+        res.status(200).json({ msg: "Post deleted ✅" });
+      }
+    );
   });
+};
+
+exports.deleteMyComment = (req, res) => {
+  const elder_id = req.user.elder_id;
+  const role = (req.user.role || "").toLowerCase();
+  const comment_id = Number(req.params.comment_id);
+
+  if (role !== "elder") return res.status(403).json({ msg: "Only elders can delete their comments." });
+  if (!comment_id) return res.status(400).json({ msg: "Invalid comment_id" });
+
+  db.query(
+    "DELETE FROM community_comments WHERE comment_id = ? AND user_id = ?",
+    [comment_id, elder_id],
+    (err, result) => {
+      if (err) return res.status(500).json({ msg: "Error deleting comment", err });
+      if (!result.affectedRows) return res.status(404).json({ msg: "Comment not found or not yours" });
+      res.status(200).json({ msg: "Comment deleted ✅" });
+    }
+  );
 };
