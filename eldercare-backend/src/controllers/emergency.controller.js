@@ -247,3 +247,106 @@ exports.rejectEmergency = (req, res) => {
     res.status(200).json({ msg: "Emergency rejected ✅" });
   });
 };
+//ELDER CONTROLLER METHODS 
+exports.elderPanic = (req, res) => {
+  const elder_id = req.user.elder_id;
+
+  const {
+    emergency_type,
+    severity,
+    latitude,
+    longitude,
+    address_text,
+    description
+  } = req.body;
+
+  const typeFinal = emergency_type || "panic";
+  const severityFinal = severity || "critical";
+
+  db.query(
+    `INSERT INTO emergency_requests
+      (elder_id, triggered_by_role, triggered_by_id, emergency_type, severity,
+       latitude, longitude, address_text, description, status)
+     VALUES (?, 'elder', ?, ?, ?, ?, ?, ?, ?, 'open')`,
+    [
+      elder_id,
+      elder_id,
+      typeFinal,
+      severityFinal,
+      latitude ?? 0,
+      longitude ?? 0,
+      address_text || null,
+      description || "Elder pressed panic button"
+    ],
+    (err, result) => {
+      if (err) {
+        console.error("Elder panic DB error:", err);
+        return res.status(500).json({ msg: "DB error", details: err.message });
+      }
+
+      return res.status(201).json({
+        msg: "Emergency created",
+        emergency_id: result.insertId
+      });
+    }
+  );
+};
+exports.getMyEmergencies = (req, res) => {
+  const elder_id = req.user.elder_id;
+
+  db.query(
+    `SELECT
+      emergency_id,
+      emergency_type,
+      severity,
+      status,
+      latitude,
+      longitude,
+      address_text,
+      description,
+      created_at,
+      assigned_home_id,
+      assigned_at,
+      accepted_at,
+      resolved_at,
+      notes
+     FROM emergency_requests
+     WHERE elder_id = ?
+     ORDER BY created_at DESC`,
+    [elder_id],
+    (err, rows) => {
+      if (err) {
+        console.error("Get elder emergencies DB error:", err);
+        return res.status(500).json({ msg: "DB error", details: err.message });
+      }
+      res.json(rows);
+    }
+  );
+};
+exports.cancelMyEmergency = (req, res) => {
+  const elder_id = req.user.elder_id;
+  const { emergency_id } = req.params;
+
+  db.query(
+    `UPDATE emergency_requests
+     SET status = 'cancelled'
+     WHERE emergency_id = ?
+       AND elder_id = ?
+       AND status IN ('open', 'assigned')`,
+    [emergency_id, elder_id],
+    (err, result) => {
+      if (err) {
+        console.error("Cancel emergency DB error:", err);
+        return res.status(500).json({ msg: "DB error", details: err.message });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          msg: "Emergency not found or cannot be cancelled"
+        });
+      }
+
+      res.json({ msg: "Emergency cancelled" });
+    }
+  );
+};

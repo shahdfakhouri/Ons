@@ -23,6 +23,8 @@ const emergencyRoutes = require("./src/routes/emergency.routes");
 const staffNotesRoutes = require("./src/routes/staffNotes.routes");
 const reportsRoutes = require("./src/routes/reports.routes");
 const publicRoutes = require("./src/routes/public.routes");
+const communityRoutes = require("./src/routes/community.routes");
+const entertainmentRoutes = require("./src/routes/entertainment.routes");
 
 const path = require("path");
 const app = express();
@@ -64,6 +66,8 @@ app.use("/api/emergency", emergencyRoutes);
 app.use("/api/retirement/notes", staffNotesRoutes);
 app.use("/api/retirement/reports", reportsRoutes);
 app.use("/api", publicRoutes);
+app.use("/api/community", communityRoutes);
+app.use("/api/entertainment", entertainmentRoutes);
 
 //Notifications 
 app.use("/api/notifications", notificationsRoutes);

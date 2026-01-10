@@ -4,7 +4,7 @@ const notificationsController = require("../controllers/notifications.controller
 const verifyToken = require("../middleware/authmiddleware");
 const isAdmin = require("../middleware/adminMiddleware");
 const { notify } = require("../services/notification.service");
-
+const allowRoles = require("../middleware/roleMiddleware");
 
 router.post("/test", async (req, res) => {
   try {
@@ -41,5 +41,8 @@ router.get("/my", verifyToken, notificationsController.getMyNotifications);
 // ✅ Mark MY notification as read (any logged-in user)
 router.put("/:id/read", verifyToken, notificationsController.markMyAsRead);
 // (or router.patch("/:id/read", ...))
+//elder
+router.get("/", verifyToken, allowRoles(["elder"]), notificationsController.getElderNotifications);
+router.patch("/:notification_id/read", verifyToken, allowRoles(["elder"]), notificationsController.markElderNotificationRead);
 
 module.exports = router;

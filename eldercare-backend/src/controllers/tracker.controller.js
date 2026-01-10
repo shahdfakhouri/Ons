@@ -187,3 +187,95 @@ exports.getDistanceToCaregiver = (req, res) => {
     }
   );
 };
+// Elder controller 
+exports.getElderCurrentLocation = (req, res) => {
+  const elder_id = req.user.elder_id;
+
+  db.query(
+    `SELECT location_id, elder_id, latitude, longitude, recorded_at
+     FROM elder_location
+     WHERE elder_id = ?
+     ORDER BY recorded_at DESC
+     LIMIT 1`,
+    [elder_id],
+    (err, rows) => {
+      if (err) {
+        console.error("Current location DB error:", err);
+        return res.status(500).json({ msg: "DB error", details: err.message });
+      }
+
+      if (!rows.length) {
+        return res.status(404).json({ msg: "No location found for this elder yet" });
+      }
+
+      res.json(rows[0]);
+    }
+  );
+};
+exports.getElderSafeZones = (req, res) => {
+  const elder_id = req.user.elder_id;
+
+  db.query(
+    `SELECT zone_id, name, center_lat, center_lng, radius_m, active, created_at
+     FROM elder_safe_zones
+     WHERE elder_id = ?
+     ORDER BY created_at DESC`,
+    [elder_id],
+    (err, rows) => {
+      if (err) {
+        console.error("Safe zones DB error:", err);
+        return res.status(500).json({ msg: "DB error", details: err.message });
+      }
+
+      res.json(rows);
+    }
+  );
+};
+exports.elderRequestHelp = (req, res) => {
+  const elder_id = req.user.elder_id;
+  const { description, severity } = req.body;
+
+  const severityFinal = severity || "critical";
+  const descFinal = description || "Elder requested help (lost)";
+
+  // 1) get latest location
+  db.query(
+    `SELECT latitude, longitude
+     FROM elder_location
+     WHERE elder_id = ?
+     ORDER BY recorded_at DESC
+     LIMIT 1`,
+    [elder_id],
+    (err, locRows) => {
+      if (err) {
+        console.error("Request help location DB error:", err);
+        return res.status(500).json({ msg: "DB error", details: err.message });
+      }
+
+      const lat = locRows.length ? (locRows[0].latitude ?? 0) : 0;
+      const lng = locRows.length ? (locRows[0].longitude ?? 0) : 0;
+
+      // 2) create emergency request
+      db.query(
+        `INSERT INTO emergency_requests
+          (elder_id, triggered_by_role, triggered_by_id, emergency_type, severity,
+           latitude, longitude, status, description)
+         VALUES (?, 'elder', ?, 'lost', ?, ?, ?, 'open', ?)`,
+        [elder_id, elder_id, severityFinal, lat, lng, descFinal],
+        (err2, result) => {
+          if (err2) {
+            console.error("Request help emergency DB error:", err2);
+            return res.status(500).json({ msg: "DB error", details: err2.message });
+          }
+
+          res.status(201).json({
+            msg: "Help request created",
+            emergency_id: result.insertId,
+            latitude: lat,
+            longitude: lng
+          });
+        }
+      );
+    }
+  );
+};

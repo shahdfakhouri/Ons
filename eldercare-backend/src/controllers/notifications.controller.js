@@ -121,3 +121,51 @@ exports.markMyAsRead = (req, res) => {
     }
   );
 };
+// ELDER CONTROLLER
+// GET /api/notifications  (elder inbox)
+exports.getElderNotifications = (req, res) => {
+  const elder_id = req.user.elder_id;
+
+  db.query(
+    `SELECT notification_id, category, title, message, is_read, read_at, created_at
+     FROM notifications
+     WHERE recipient_role = 'elder' AND recipient_id = ?
+     ORDER BY created_at DESC
+     LIMIT 200`,
+    [elder_id],
+    (err, rows) => {
+      if (err) {
+        console.error("Get elder notifications DB error:", err);
+        return res.status(500).json({ msg: "DB error", details: err.message });
+      }
+      res.json(rows);
+    }
+  );
+};
+
+// PATCH /api/notifications/:notification_id/read
+exports.markElderNotificationRead = (req, res) => {
+  const elder_id = req.user.elder_id;
+  const { notification_id } = req.params;
+
+  db.query(
+    `UPDATE notifications
+     SET is_read = 1, read_at = NOW()
+     WHERE notification_id = ?
+       AND recipient_role = 'elder'
+       AND recipient_id = ?`,
+    [notification_id, elder_id],
+    (err, result) => {
+      if (err) {
+        console.error("Mark elder notification read DB error:", err);
+        return res.status(500).json({ msg: "DB error", details: err.message });
+      }
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ msg: "Notification not found" });
+      }
+
+      res.json({ msg: "Notification marked as read" });
+    }
+  );
+};
