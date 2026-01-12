@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:ons_app/screens/home/sections/header.dart';
 import 'package:ons_app/screens/home/sections/hero.dart';
 import 'package:ons_app/screens/home/sections/features.dart';
-import 'package:ons_app/screens/elder/elder_mode_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -12,21 +11,18 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
-
       body: Stack(
         children: [
-          // Scrollable content (Hero + Features + more)
           SingleChildScrollView(
             child: Column(
               children: const [
-                SizedBox(height: 120), // space for transparent header
+                SizedBox(height: 120),
                 HeroSection(),
                 FeaturesSection(),
+                SizedBox(height: 80),
               ],
             ),
           ),
-
-          // Floating transparent header
           const Positioned(
             top: 0,
             left: 0,
@@ -36,21 +32,13 @@ class HomePage extends StatelessWidget {
         ],
       ),
 
-      // 🔹 TEMP button just to test Elder Mode from PC
+      // ✅ Elder Mode entry
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const ElderModePage(
-                elderName: 'أم أحمد',
-                nextVisitText: 'اليوم الساعة ٤:٠٠ مساءً - زيارة سارة (الممرضة)',
-              ),
-            ),
-          );
+          Navigator.pushNamed(context, '/elder/login');
         },
         icon: const Icon(Icons.elderly),
-        label: const Text('وضع المسن'),
+        label: const Text('Elder Mode'),
       ),
     );
   }

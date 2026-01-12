@@ -167,10 +167,7 @@ Future<Uint8List> exportWeeklyReportsCsv() async {
     return '?$q';
   }
 
-Future<List> getHealthAlerts() async {
-  final j = await get('/health-alerts');
-  return (j['alerts'] as List?) ?? [];
-}
+
 
 
 Future<List> getActiveUsers() async {

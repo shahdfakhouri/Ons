@@ -11,14 +11,13 @@ dependencies:
   flutter:
     sdk: flutter
 
-
   cupertino_icons: ^1.0.8
   google_fonts: ^6.2.1
   url_launcher: ^6.3.0
   http: ^1.2.2
   dio: ^5.9.0
   intl: ^0.19.0
-
+  shared_preferences: ^2.2.3
 
 dev_dependencies:
   flutter_test:
@@ -31,5 +30,3 @@ flutter:
   assets:
     - assets/logo.png
     - assets/hero.jpg
-
-

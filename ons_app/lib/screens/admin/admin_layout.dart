@@ -5,7 +5,6 @@ import 'package:ons_app/screens/admin/approve_caregivers.dart';
 import 'package:ons_app/screens/admin/approve_retirement_homes.dart';
 import 'package:ons_app/screens/admin/health_logs_page.dart';
 import 'package:ons_app/screens/admin/matching_overview_page.dart';
-import 'package:ons_app/screens/admin/notifications_page.dart';
 import 'package:ons_app/screens/admin/payments_page.dart';
 import 'package:ons_app/services/auth_service.dart';
 import 'package:ons_app/screens/auth/login_page.dart';
@@ -14,6 +13,8 @@ import 'package:ons_app/screens/admin/users_management_page.dart';
 import 'package:ons_app/screens/admin/elder_assignments_page.dart';
 import 'package:ons_app/screens/admin/gps_overview_page.dart';
 import 'package:ons_app/screens/admin/admin_analytics_page.dart';
+import 'package:ons_app/screens/admin/admin_notifications_page.dart';
+
 
 
 class AdminLayout extends StatelessWidget {
@@ -242,7 +243,7 @@ class _AdminSidebar extends StatelessWidget {
               onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => const NotificationsPage(),
+                          builder: (_) => const AdminNotificationsPage(),
                         ),
                       );
                     },

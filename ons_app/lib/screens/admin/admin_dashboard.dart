@@ -6,7 +6,7 @@ import 'package:ons_app/screens/admin/approve_caregivers.dart';
 import 'package:ons_app/screens/admin/approve_retirement_homes.dart';
 import 'package:ons_app/screens/admin/health_logs_page.dart';
 import 'package:ons_app/screens/admin/matching_overview_page.dart';
-import 'package:ons_app/screens/admin/notifications_page.dart';
+import 'package:ons_app/screens/admin/admin_notifications_page.dart';
 import 'package:ons_app/screens/admin/payments_page.dart';
 
 import 'package:ons_app/screens/admin/weekly_reports_page.dart';
@@ -205,7 +205,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                               subtitle: 'Health alerts & system messages.',
                               onTap: () => _navReplace(
                                 context,
-                                const NotificationsPage(),
+                                const AdminNotificationsPage(),
                               ),
                             ),
                             _AdminTile(
