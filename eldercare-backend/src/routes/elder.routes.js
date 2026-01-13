@@ -80,4 +80,9 @@ router.patch("/calls/:call_id/decline", verifyToken, roleMiddleware(["elder"]), 
 
 router.get("/contacts", verifyToken, roleMiddleware(["elder"]), elderController.getMyContacts);
 
+// NEWS + WEATHER (elder)
+router.get("/content/news", verifyToken, roleMiddleware(["elder"]), elderController.getElderNews);
+router.get("/content/weather", verifyToken, roleMiddleware(["elder"]), elderController.getElderWeather);
+
+
 module.exports = router;
