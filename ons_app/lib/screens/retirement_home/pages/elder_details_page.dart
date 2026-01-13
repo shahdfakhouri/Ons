@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
 import 'package:ons_app/services/retirement_home_api.dart';
+import 'package:ons_app/services/retirement_medication_api.dart';
 
 class RetirementElderDetailsPage extends StatefulWidget {
   final int elderId;
@@ -11,6 +14,7 @@ class RetirementElderDetailsPage extends StatefulWidget {
 
 class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage> with TickerProviderStateMixin {
   final _api = RetirementHomeApi();
+  final _medApi = RetirementMedicationApi();
 
   bool _loading = true;
   String? _error;
@@ -21,6 +25,12 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
   List<Map<String, dynamic>> _attendance = [];
   Map<String, dynamic>? _summary;
 
+  // ✅ meds
+  List<Map<String, dynamic>> _meds = [];
+  List<Map<String, dynamic>> _medLogs = [];
+  String? _logsDate; // YYYY-MM-DD
+
+  // summary form
   final _summaryMood = TextEditingController();
   final _summaryMeals = TextEditingController();
   final _summaryActivities = TextEditingController();
@@ -33,7 +43,7 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 5, vsync: this);
+    _tabs = TabController(length: 6, vsync: this); // ✅ was 5
     _loadAll();
   }
 
@@ -46,6 +56,16 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
     _sleepHours.dispose();
     _summaryNotes.dispose();
     super.dispose();
+  }
+
+  String _fmt(dynamic v) {
+    if (v == null) return '-';
+    try {
+      final dt = DateTime.parse(v.toString());
+      return DateFormat('yyyy-MM-dd HH:mm').format(dt);
+    } catch (_) {
+      return v.toString();
+    }
   }
 
   Future<void> _loadAll() async {
@@ -61,17 +81,25 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
       final att = await _api.getElderAttendance(widget.elderId, limit: 50);
       final sum = await _api.getDailySummary(widget.elderId);
 
+      // ✅ meds (from /api/medication)
+      final meds = await _medApi.getElderMedications(widget.elderId);
+      final medLogs = await _medApi.getMedicationLogs(widget.elderId, date: _logsDate);
+
       _elder = elder;
       _healthLogs = logs;
       _locations = loc;
       _attendance = att;
       _summary = sum;
 
+      _meds = meds;
+      _medLogs = medLogs;
+
       // prefill summary form (if exists)
       if (sum != null) {
         _summaryMood.text = (sum['mood'] ?? '').toString();
         _summaryMeals.text = (sum['meals'] ?? '').toString();
         _summaryActivities.text = (sum['activities'] ?? '').toString();
+
         final mt = sum['medication_taken'];
         if (mt == null) {
           _medTaken = null;
@@ -80,6 +108,7 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
         } else {
           _medTaken = mt.toString() == '1' || mt.toString().toLowerCase() == 'true';
         }
+
         _sleepHours.text = (sum['sleep_hours'] ?? '').toString();
         _summaryNotes.text = (sum['notes'] ?? '').toString();
       }
@@ -135,7 +164,8 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
         'mood': _summaryMood.text.trim().isEmpty ? null : _summaryMood.text.trim(),
         'meals': _summaryMeals.text.trim().isEmpty ? null : _summaryMeals.text.trim(),
         'activities': _summaryActivities.text.trim().isEmpty ? null : _summaryActivities.text.trim(),
-        'medication_taken': _medTaken,
+        // ✅ safer (backend often expects 0/1/null)
+        'medication_taken': _medTaken == null ? null : (_medTaken! ? 1 : 0),
         'sleep_hours': int.tryParse(_sleepHours.text.trim()),
         'notes': _summaryNotes.text.trim().isEmpty ? null : _summaryNotes.text.trim(),
       });
@@ -149,10 +179,89 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
     }
   }
 
+  Future<void> _dialogCreateMedication() async {
+    final name = TextEditingController();
+    final dosage = TextEditingController();
+    final frequency = TextEditingController();
+    final instructions = TextEditingController();
+    final startDate = TextEditingController(); // YYYY-MM-DD
+    final endDate = TextEditingController();   // YYYY-MM-DD
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Create medication plan'),
+        content: SingleChildScrollView(
+          child: Column(
+            children: [
+              TextField(controller: name, decoration: const InputDecoration(labelText: 'Name *')),
+              TextField(controller: dosage, decoration: const InputDecoration(labelText: 'Dosage')),
+              TextField(controller: frequency, decoration: const InputDecoration(labelText: 'Frequency')),
+              TextField(controller: instructions, decoration: const InputDecoration(labelText: 'Instructions'), maxLines: 2),
+              TextField(controller: startDate, decoration: const InputDecoration(labelText: 'Start date (YYYY-MM-DD)')),
+              TextField(controller: endDate, decoration: const InputDecoration(labelText: 'End date (YYYY-MM-DD)')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Create')),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    if (name.text.trim().isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name is required')));
+      return;
+    }
+
+    try {
+      await _medApi.createMedicationPlan(widget.elderId, {
+        'name': name.text.trim(),
+        'dosage': dosage.text.trim().isEmpty ? null : dosage.text.trim(),
+        'frequency': frequency.text.trim().isEmpty ? null : frequency.text.trim(),
+        'instructions': instructions.text.trim().isEmpty ? null : instructions.text.trim(),
+        'start_date': startDate.text.trim().isEmpty ? null : startDate.text.trim(),
+        'end_date': endDate.text.trim().isEmpty ? null : endDate.text.trim(),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Medication plan created ✅')));
+      await _loadAll();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
+    } finally {
+      name.dispose();
+      dosage.dispose();
+      frequency.dispose();
+      instructions.dispose();
+      startDate.dispose();
+      endDate.dispose();
+    }
+  }
+
+  Future<void> _pickLogsDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(now.year - 1),
+      lastDate: DateTime(now.year + 1),
+      initialDate: now,
+    );
+    if (picked == null) return;
+
+    setState(() => _logsDate = DateFormat('yyyy-MM-dd').format(picked));
+    await _loadAll();
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) return Center(child: Text(_error!));
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_error != null) return Scaffold(body: Center(child: Text(_error!)));
 
     final elder = _elder ?? {};
     final name = (elder['name'] ?? elder['elder_name'] ?? 'Elder').toString();
@@ -169,6 +278,7 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
             Tab(text: 'Location'),
             Tab(text: 'Attendance'),
             Tab(text: 'Daily Summary'),
+            Tab(text: 'Meds'), // ✅ new
           ],
         ),
         actions: [
@@ -183,6 +293,7 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
           _locationTab(),
           _attendanceTab(),
           _summaryTab(),
+          _medsTab(), // ✅ new
         ],
       ),
     );
@@ -241,9 +352,7 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
   }
 
   Widget _healthTab() {
-    if (_healthLogs.isEmpty) {
-      return const Center(child: Text('No health logs found.'));
-    }
+    if (_healthLogs.isEmpty) return const Center(child: Text('No health logs found.'));
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: _healthLogs.length,
@@ -261,9 +370,7 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
   }
 
   Widget _locationTab() {
-    if (_locations.isEmpty) {
-      return const Center(child: Text('No location history found.'));
-    }
+    if (_locations.isEmpty) return const Center(child: Text('No location history found.'));
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: _locations.length,
@@ -282,9 +389,7 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
   }
 
   Widget _attendanceTab() {
-    if (_attendance.isEmpty) {
-      return const Center(child: Text('No attendance history found.'));
-    }
+    if (_attendance.isEmpty) return const Center(child: Text('No attendance history found.'));
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: _attendance.length,
@@ -325,20 +430,14 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
                 TextField(controller: _summaryMeals, decoration: const InputDecoration(labelText: 'Meals')),
                 TextField(controller: _summaryActivities, decoration: const InputDecoration(labelText: 'Activities')),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<bool?>(
-                        value: _medTaken,
-                        items: const [
-                          DropdownMenuItem(value: null, child: Text('Medication: (unknown)')),
-                          DropdownMenuItem(value: true, child: Text('Medication: taken')),
-                          DropdownMenuItem(value: false, child: Text('Medication: not taken')),
-                        ],
-                        onChanged: (v) => setState(() => _medTaken = v),
-                      ),
-                    ),
+                DropdownButtonFormField<bool?>(
+                  value: _medTaken,
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('Medication: (unknown)')),
+                    DropdownMenuItem(value: true, child: Text('Medication: taken')),
+                    DropdownMenuItem(value: false, child: Text('Medication: not taken')),
                   ],
+                  onChanged: (v) => setState(() => _medTaken = v),
                 ),
                 TextField(
                   controller: _sleepHours,
@@ -359,6 +458,79 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
             ),
           ),
         ),
+      ],
+    );
+  }
+
+  // ✅ NEW TAB
+  Widget _medsTab() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text('Medication plan', style: Theme.of(context).textTheme.titleMedium)),
+            FilledButton.icon(
+              onPressed: _dialogCreateMedication,
+              icon: const Icon(Icons.add),
+              label: const Text('Add'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+
+        if (_meds.isEmpty)
+          const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No medication plans yet.'))),
+        for (final m in _meds)
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.medication_outlined),
+              title: Text('${m['name'] ?? '-'} ${m['dosage'] != null ? '• ${m['dosage']}' : ''}'),
+              subtitle: Text(
+                'Freq: ${m['frequency'] ?? '-'}\n'
+                '${(m['instructions'] ?? '').toString()}\n'
+                'Start: ${m['start_date'] ?? '-'} • End: ${m['end_date'] ?? '-'}\n'
+                'Active: ${(m['active'] ?? 1).toString()}',
+              ),
+            ),
+          ),
+
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            Expanded(child: Text('Medication logs', style: Theme.of(context).textTheme.titleMedium)),
+            TextButton(
+              onPressed: _pickLogsDate,
+              child: Text(_logsDate == null ? 'Pick date' : _logsDate!),
+            ),
+            if (_logsDate != null)
+              IconButton(
+                tooltip: 'Clear',
+                onPressed: () async {
+                  setState(() => _logsDate = null);
+                  await _loadAll();
+                },
+                icon: const Icon(Icons.clear),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        if (_medLogs.isEmpty)
+          const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No medication logs found.'))),
+        for (final l in _medLogs)
+          Card(
+            child: ListTile(
+              title: Text('${l['name'] ?? '-'} ${l['dosage'] != null ? '• ${l['dosage']}' : ''}'),
+              subtitle: Text(
+                'Status: ${l['status'] ?? '-'}\n'
+                'Scheduled: ${l['scheduled_time'] ?? '-'}\n'
+                'Taken at: ${l['taken_at'] ?? '-'}\n'
+                'Created: ${_fmt(l['created_at'])}\n'
+                '${(l['notes'] ?? '').toString()}',
+              ),
+            ),
+          ),
       ],
     );
   }

@@ -17,6 +17,7 @@ class RetirementHomeApi {
   }
 
   Uri _url(String path) => Uri.parse('${ApiConfig.retirementBase}$path');
+  Uri _reportsUrl(String path) => Uri.parse('${ApiConfig.retirementReportsBase}$path');
 
   void _throwIfBad(http.Response res) {
     if (res.statusCode >= 200 && res.statusCode < 300) return;
@@ -109,8 +110,7 @@ class RetirementHomeApi {
   Future<void> addCaregiverToHome(int caregiverId) async =>
       await post('/caregivers/add', body: {'caregiver_id': caregiverId});
 
-  Future<void> removeCaregiverFromHome(int caregiverId) async =>
-      await del('/caregivers/$caregiverId');
+  Future<void> removeCaregiverFromHome(int caregiverId) async => await del('/caregivers/$caregiverId');
 
   // =======================
   // ASSIGNMENTS
@@ -278,4 +278,118 @@ class RetirementHomeApi {
   Future<void> updateIncidentStatus(int incidentId, String status) async {
     await patch('/incidents/$incidentId/status', body: {'status': status});
   }
+
+  // =======================
+  // ✅ REPORTS (NEW)
+  // Base: /api/retirement/reports
+  // =======================
+
+  Future<Map<String, dynamic>> getWeeklyReport({required String startYYYYMMDD}) async {
+    final uri = _reportsUrl('/weekly').replace(queryParameters: {'start': startYYYYMMDD});
+    final res = await _client.get(uri, headers: _headers());
+    _throwIfBad(res);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getMonthlyReport({required String monthYYYYMM}) async {
+    final uri = _reportsUrl('/monthly').replace(queryParameters: {'month': monthYYYYMM});
+    final res = await _client.get(uri, headers: _headers());
+    _throwIfBad(res);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> saveReport({
+    required String periodType, // weekly | monthly
+    required String periodStart, // YYYY-MM-DD
+    required String periodEnd, // YYYY-MM-DD
+    required Map<String, dynamic> payload, // the "report" object
+  }) async {
+    final res = await _client.post(
+      _reportsUrl('/save'),
+      headers: _headers(),
+      body: jsonEncode({
+        'period_type': periodType,
+        'period_start': periodStart,
+        'period_end': periodEnd,
+        'payload': payload,
+      }),
+    );
+    _throwIfBad(res);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<List<Map<String, dynamic>>> getSavedReports() async {
+    final res = await _client.get(_reportsUrl('/saved'), headers: _headers());
+    _throwIfBad(res);
+    final j = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = (j['reports'] as List?) ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  // =======================
+  // ✅ STAFF NOTES (NEW)
+  // Base: /api/retirement/notes
+  // =======================
+
+  Uri _notesUrl(String path) => Uri.parse('${ApiConfig.retirementNotesBase}$path');
+
+  Future<List<Map<String, dynamic>>> getHomeNotes() async {
+    final res = await _client.get(_notesUrl('/'), headers: _headers());
+    _throwIfBad(res);
+    final j = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = (j['notes'] as List?) ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getElderNotes(int elderId) async {
+    final res = await _client.get(_notesUrl('/elders/$elderId'), headers: _headers());
+    _throwIfBad(res);
+    final j = jsonDecode(res.body) as Map<String, dynamic>;
+    final list = (j['notes'] as List?) ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<void> createNote({
+    int? elderId,
+    int? caregiverId,
+    String? title,
+    required String note,
+  }) async {
+    final res = await _client.post(
+      _notesUrl('/'),
+      headers: _headers(),
+      body: jsonEncode({
+        'elder_id': elderId,
+        'caregiver_id': caregiverId,
+        'title': title,
+        'note': note,
+      }),
+    );
+    _throwIfBad(res);
+  }
+
+  Future<void> updateNote({
+    required int noteId,
+    String? title,
+    String? note,
+  }) async {
+    final res = await _client.put(
+      _notesUrl('/$noteId'),
+      headers: _headers(),
+      body: jsonEncode({
+        'title': title,
+        'note': note,
+      }),
+    );
+    _throwIfBad(res);
+  }
+
+  Future<void> deleteNote(int noteId) async {
+    final res = await _client.delete(_notesUrl('/$noteId'), headers: _headers());
+    _throwIfBad(res);
+  }
+
+
+
+
 }

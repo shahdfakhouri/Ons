@@ -446,7 +446,13 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
             _HealthTab(elderId: widget.elderId, reload: _reload, api: _api, onAdd: _dialogAddHealthLog, fmt: _fmtDate),
 
             // 3) Medications
-            _MedsTab(elderId: widget.elderId, reload: _reload, api: _api, fmt: _fmtDate),
+_MedsTab(
+  elderId: widget.elderId,
+  reload: _reload,
+  api: _api,
+  fmt: _fmtDate,
+  onChanged: _refreshAll,
+),
 
             // 4) Summary
             _SummaryTab(elderId: widget.elderId, reload: _reload, api: _api, onEdit: _dialogEditDailySummary),
@@ -544,8 +550,15 @@ class _MedsTab extends StatefulWidget {
   final int reload;
   final CaregiverApi api;
   final String Function(dynamic) fmt;
+  final VoidCallback onChanged;
 
-  const _MedsTab({required this.elderId, required this.reload, required this.api, required this.fmt});
+  const _MedsTab({
+    required this.elderId,
+    required this.reload,
+    required this.api,
+    required this.fmt,
+    required this.onChanged,
+  });
 
   @override
   State<_MedsTab> createState() => _MedsTabState();
@@ -554,6 +567,68 @@ class _MedsTab extends StatefulWidget {
 class _MedsTabState extends State<_MedsTab> {
   String? _date; // YYYY-MM-DD
   int _days = 7;
+
+  void _snack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
+
+  Future<void> _logStatus(Map<String, dynamic> item, String status) async {
+    final notes = TextEditingController();
+    final scheduled = TextEditingController(text: (item['scheduled_time'] ?? '').toString());
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Mark as $status'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('${item['name'] ?? '-'} • ${item['dosage'] ?? '-'}'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: scheduled,
+              decoration: const InputDecoration(
+                labelText: 'Scheduled time (optional)',
+                hintText: 'YYYY-MM-DD HH:mm:ss',
+              ),
+            ),
+            TextField(
+              controller: notes,
+              decoration: const InputDecoration(labelText: 'Notes (optional)'),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+
+    final medId = int.tryParse((item['medication_id'] ?? '').toString());
+    if (medId == null) {
+      _snack('Missing medication_id from API response');
+      return;
+    }
+
+    try {
+      await widget.api.logMedicationStatus(
+        widget.elderId,
+        medicationId: medId,
+        status: status,
+        scheduledTime: scheduled.text.trim().isEmpty ? null : scheduled.text.trim(),
+        notes: notes.text.trim().isEmpty ? null : notes.text.trim(),
+      );
+      _snack('Medication logged ✅');
+      widget.onChanged();
+    } catch (e) {
+      _snack('Failed: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -572,23 +647,21 @@ class _MedsTabState extends State<_MedsTab> {
             final meds = snap.data ?? [];
             if (meds.isEmpty) return const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No active meds.')));
             return Column(
-              children: meds
-                  .map(
-                    (m) => Card(
-                      child: ListTile(
-                        title: Text('${m['name'] ?? '-'} • ${m['dosage'] ?? '-'}'),
-                        subtitle: Text('Freq: ${m['frequency'] ?? '-'}\n${m['instructions'] ?? ''}'),
-                      ),
-                    ),
-                  )
-                  .toList(),
+              children: meds.map((m) {
+                return Card(
+                  child: ListTile(
+                    title: Text('${m['name'] ?? '-'} • ${m['dosage'] ?? '-'}'),
+                    subtitle: Text('Freq: ${m['frequency'] ?? '-'}\n${m['instructions'] ?? ''}'),
+                  ),
+                );
+              }).toList(),
             );
           },
         ),
 
         const SizedBox(height: 16),
 
-        // Today checklist
+        // Today checklist + ACTIONS ✅
         Text('Today checklist', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         FutureBuilder<List<Map<String, dynamic>>>(
@@ -599,15 +672,51 @@ class _MedsTabState extends State<_MedsTab> {
             if (snap.hasError) return Text('Failed: ${snap.error}');
             final list = snap.data ?? [];
             if (list.isEmpty) return const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No checklist items.')));
+
             return Column(
-              children: list
-                  .map((x) => Card(
-                        child: ListTile(
+              children: list.map((x) {
+                final status = (x['today_status'] ?? x['status'] ?? 'pending').toString();
+                return Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Column(
+                      children: [
+                        ListTile(
                           title: Text('${x['name'] ?? '-'} • ${x['dosage'] ?? '-'}'),
-                          subtitle: Text('Today: ${x['today_status'] ?? 'not logged'} • ${widget.fmt(x['today_taken_at'])}'),
+                          subtitle: Text('Status: $status • ${widget.fmt(x['today_taken_at'] ?? x['taken_at'])}'),
                         ),
-                      ))
-                  .toList(),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: FilledButton.icon(
+                                onPressed: () => _logStatus(x, 'taken'),
+                                icon: const Icon(Icons.check),
+                                label: const Text('Taken'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => _logStatus(x, 'missed'),
+                                child: const Text('Missed'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => _logStatus(x, 'skipped'),
+                                child: const Text('Skipped'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
             );
           },
         ),
@@ -649,14 +758,14 @@ class _MedsTabState extends State<_MedsTab> {
             final logs = snap.data ?? [];
             if (logs.isEmpty) return const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No logs.')));
             return Column(
-              children: logs
-                  .map((l) => Card(
-                        child: ListTile(
-                          title: Text('${l['name'] ?? '-'} • ${l['dosage'] ?? '-'}'),
-                          subtitle: Text('Status: ${l['status'] ?? '-'} • Taken: ${widget.fmt(l['taken_at'])}\n${l['notes'] ?? ''}'),
-                        ),
-                      ))
-                  .toList(),
+              children: logs.map((l) {
+                return Card(
+                  child: ListTile(
+                    title: Text('${l['name'] ?? '-'} • ${l['dosage'] ?? '-'}'),
+                    subtitle: Text('Status: ${l['status'] ?? '-'} • Taken: ${widget.fmt(l['taken_at'])}\n${l['notes'] ?? ''}'),
+                  ),
+                );
+              }).toList(),
             );
           },
         ),
@@ -702,6 +811,7 @@ class _MedsTabState extends State<_MedsTab> {
     );
   }
 }
+
 
 class _SummaryTab extends StatelessWidget {
   final int elderId;

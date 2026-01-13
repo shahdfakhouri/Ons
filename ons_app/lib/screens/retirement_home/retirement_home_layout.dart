@@ -8,9 +8,12 @@ import 'pages/alerts_page.dart';
 import 'pages/emergencies_page.dart';
 import 'pages/shifts_page.dart';
 import 'pages/daily_summaries_page.dart';
+import 'pages/reports_page.dart';
 import 'pages/payments_page.dart';
 import 'pages/transactions_page.dart';
 import 'pages/incidents_page.dart';
+import 'pages/notes_page.dart';
+
 
 class RetirementHomeLayout extends StatefulWidget {
   final int initialIndex;
@@ -32,9 +35,12 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
     'Emergencies',
     'Shifts',
     'Daily Summaries',
+    'Reports',
     'Payments',
     'Transactions',
     'Incidents',
+    'Notes',
+
   ];
 
   final _pages = const [
@@ -46,9 +52,12 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
     RetirementEmergenciesPage(),
     RetirementShiftsPage(),
     RetirementDailySummariesPage(),
+    RetirementReportsPage(),
     RetirementPaymentsPage(),
     RetirementTransactionsPage(),
     RetirementIncidentsPage(),
+    RetirementNotesPage(),
+
   ];
 
   @override
@@ -59,7 +68,6 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
 
   void _goTo(int i) {
     setState(() => _index = i);
-    // close drawer if open (mobile)
     if (Navigator.canPop(context)) Navigator.pop(context);
   }
 
@@ -131,6 +139,21 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
           selectedIcon: Icon(Icons.today),
           label: Text('Summaries'),
         ),
+
+        const NavigationDrawerDestination(
+  icon: Icon(Icons.note_alt_outlined),
+  selectedIcon: Icon(Icons.note_alt),
+  label: Text('Notes'),
+),
+
+
+        // ✅ Reports
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.insights_outlined),
+          selectedIcon: Icon(Icons.insights),
+          label: Text('Reports'),
+        ),
+
         const NavigationDrawerDestination(
           icon: Icon(Icons.payments_outlined),
           selectedIcon: Icon(Icons.payments),
@@ -172,8 +195,6 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
               children: [
                 SizedBox(width: 280, child: _nav(cs)),
                 const VerticalDivider(width: 1),
-
-                // centered content on web
                 Expanded(
                   child: Center(
                     child: ConstrainedBox(
@@ -190,7 +211,6 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
           );
         }
 
-        // Mobile: hamburger drawer
         return Scaffold(
           appBar: AppBar(title: Text(_titles[_index])),
           drawer: Drawer(child: SafeArea(child: _nav(cs))),

@@ -34,25 +34,35 @@ class _MedicationTodayPageState extends State<MedicationTodayPage> {
   }
 
   Future<void> _confirm(dynamic item) async {
-    // backend fields vary; we try to send best possible ids
-    final Map<String, dynamic> body = {};
-    final id = item['medication_id'] ?? item['id'] ?? item['schedule_id'] ?? item['log_id'];
-    if (id != null) body['medication_id'] = id;
+  final Map<String, dynamic> body = {};
 
-    // optional time/name if exists
-    if (item['time'] != null) body['time'] = item['time'];
-    if (item['name'] != null) body['name'] = item['name'];
+  // required
+  final id =
+      item['medication_id'] ?? item['id'] ?? item['schedule_id'] ?? item['log_id'];
+  if (id != null) body['medication_id'] = id;
 
-    try {
-      await api.confirmMedTaken(body);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Marked as taken ✅')));
-      await _load();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Confirm failed: $e')));
-    }
+  // ✅ backend expects scheduled_time
+  final scheduled = item['scheduled_time'] ?? item['time'];
+  if (scheduled != null && scheduled.toString().trim().isNotEmpty) {
+    body['scheduled_time'] = scheduled;
   }
+
+  // optional notes (only if you want)
+  // body['notes'] = 'Taken by elder';
+
+  try {
+    await api.confirmMedTaken(body);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('Marked as taken ✅')));
+    await _load();
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Confirm failed: $e')));
+  }
+}
+
 
   @override
   Widget build(BuildContext context) {

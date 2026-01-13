@@ -8,11 +8,15 @@ import 'pages/emergency_page.dart';
 import 'pages/calls_page.dart';
 import 'pages/location_page.dart';
 import 'pages/gallery_page.dart';
+
+// Entertainment (Fun)
 import 'pages/entertainment/elder_entertainment_page.dart';
 
+// Inbox + Privacy
+import 'pages/notifications_page.dart';
 import 'pages/consent_page.dart';
-import 'pages/profile_page.dart';
 
+import 'pages/profile_page.dart';
 import 'pages/community/elder_community_feed_page.dart';
 import 'pages/companion/elder_companion_chat_page.dart';
 
@@ -27,7 +31,7 @@ class _ElderLayoutState extends State<ElderLayout> {
   int _index = 0;
 
   void _goTo(int i) {
-    if (i < 0 || i >= _pages.length) return; // ✅ guard
+    if (i < 0 || i >= _pages.length) return;
     setState(() => _index = i);
   }
 
@@ -40,8 +44,9 @@ class _ElderLayoutState extends State<ElderLayout> {
     const CallsPage(),                // 5
     const LocationPage(),             // 6
     const GalleryPage(),              // 7
-    const ElderEntertainmentPage(),
-      // 10
+    const ElderEntertainmentPage(),   // 8 (Fun)
+    const NotificationsPage(),        // 9 (Inbox)
+    const ConsentPage(),              // 10 (Privacy)
     const ProfilePage(),              // 11
     const ElderCommunityFeedPage(),   // 12
     const ElderCompanionChatPage(),   // 13
@@ -79,94 +84,37 @@ class _ElderLayoutState extends State<ElderLayout> {
             BottomNavigationBarItem(icon: Icon(Icons.lock), label: 'Privacy'),         // 10
             BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),       // 11
             BottomNavigationBarItem(icon: Icon(Icons.forum), label: 'Community'),      // 12
-            BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: 'Companion'),  // ✅ 13
+            BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: 'Companion'),  // 13
           ],
         ),
       );
     }
 
-    // ✅ Wide layout
     return Scaffold(
       body: Row(
         children: [
           SizedBox(
             width: 92,
             child: NavigationRail(
-              selectedIndex: _safeIndex, // ✅ safe
+              selectedIndex: _safeIndex,
               onDestinationSelected: _goTo,
               groupAlignment: -1,
               labelType: NavigationRailLabelType.none,
               destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home),
-                  label: Text('Home'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.medication_outlined),
-                  selectedIcon: Icon(Icons.medication),
-                  label: Text('Meds'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.mood_outlined),
-                  selectedIcon: Icon(Icons.mood),
-                  label: Text('Mood'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.healing_outlined),
-                  selectedIcon: Icon(Icons.healing),
-                  label: Text('Symptoms'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.sos_outlined),
-                  selectedIcon: Icon(Icons.sos),
-                  label: Text('SOS'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.call_outlined),
-                  selectedIcon: Icon(Icons.call),
-                  label: Text('Calls'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.location_on_outlined),
-                  selectedIcon: Icon(Icons.location_on),
-                  label: Text('Location'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.photo_outlined),
-                  selectedIcon: Icon(Icons.photo),
-                  label: Text('Gallery'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.play_circle_outline),
-                  selectedIcon: Icon(Icons.play_circle),
-                  label: Text('Fun'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.notifications_outlined),
-                  selectedIcon: Icon(Icons.notifications),
-                  label: Text('Inbox'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.lock_outline),
-                  selectedIcon: Icon(Icons.lock),
-                  label: Text('Privacy'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.person_outline),
-                  selectedIcon: Icon(Icons.person),
-                  label: Text('Profile'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.forum_outlined),
-                  selectedIcon: Icon(Icons.forum),
-                  label: Text('Community'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.smart_toy_outlined),
-                  selectedIcon: Icon(Icons.smart_toy),
-                  label: Text('Companion'),
-                ),
+                NavigationRailDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: Text('Home')),
+                NavigationRailDestination(icon: Icon(Icons.medication_outlined), selectedIcon: Icon(Icons.medication), label: Text('Meds')),
+                NavigationRailDestination(icon: Icon(Icons.mood_outlined), selectedIcon: Icon(Icons.mood), label: Text('Mood')),
+                NavigationRailDestination(icon: Icon(Icons.healing_outlined), selectedIcon: Icon(Icons.healing), label: Text('Symptoms')),
+                NavigationRailDestination(icon: Icon(Icons.sos_outlined), selectedIcon: Icon(Icons.sos), label: Text('SOS')),
+                NavigationRailDestination(icon: Icon(Icons.call_outlined), selectedIcon: Icon(Icons.call), label: Text('Calls')),
+                NavigationRailDestination(icon: Icon(Icons.location_on_outlined), selectedIcon: Icon(Icons.location_on), label: Text('Location')),
+                NavigationRailDestination(icon: Icon(Icons.photo_outlined), selectedIcon: Icon(Icons.photo), label: Text('Gallery')),
+                NavigationRailDestination(icon: Icon(Icons.play_circle_outline), selectedIcon: Icon(Icons.play_circle), label: Text('Fun')),
+                NavigationRailDestination(icon: Icon(Icons.notifications_outlined), selectedIcon: Icon(Icons.notifications), label: Text('Inbox')),
+                NavigationRailDestination(icon: Icon(Icons.lock_outline), selectedIcon: Icon(Icons.lock), label: Text('Privacy')),
+                NavigationRailDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: Text('Profile')),
+                NavigationRailDestination(icon: Icon(Icons.forum_outlined), selectedIcon: Icon(Icons.forum), label: Text('Community')),
+                NavigationRailDestination(icon: Icon(Icons.smart_toy_outlined), selectedIcon: Icon(Icons.smart_toy), label: Text('Companion')),
               ],
             ),
           ),

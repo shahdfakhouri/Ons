@@ -52,13 +52,20 @@ class _RetirementDashboardPageState extends State<RetirementDashboardPage> {
 
     try {
       final j = await _api.getDashboard();
-      _homeInfo = (j['homeInfo'] as Map?)?.cast<String, dynamic>();
-      _stats = (j['stats'] as Map?)?.cast<String, dynamic>();
+
+      // tolerate different shapes
+      _homeInfo = (j['homeInfo'] as Map?)?.cast<String, dynamic>() ??
+          (j['home'] as Map?)?.cast<String, dynamic>() ??
+          (j['data'] as Map?)?.cast<String, dynamic>();
+
+      _stats = (j['stats'] as Map?)?.cast<String, dynamic>() ??
+          (j['overview'] as Map?)?.cast<String, dynamic>();
 
       _name.text = (_homeInfo?['name'] ?? '').toString();
+      _address.text = (_homeInfo?['address'] ?? '').toString(); // ✅ fixed
       _city.text = (_homeInfo?['city'] ?? '').toString();
-      _email.text = (_homeInfo?['contact_email'] ?? '').toString();
-      _phone.text = (_homeInfo?['contact_phone'] ?? '').toString();
+      _email.text = (_homeInfo?['contact_email'] ?? _homeInfo?['email'] ?? '').toString();
+      _phone.text = (_homeInfo?['contact_phone'] ?? _homeInfo?['phone'] ?? '').toString();
       _services.text = (_homeInfo?['services'] ?? '').toString();
       _monthly.text = (_homeInfo?['monthly_cost'] ?? '').toString();
 
@@ -75,6 +82,9 @@ class _RetirementDashboardPageState extends State<RetirementDashboardPage> {
     if (!_formKey.currentState!.validate()) return;
 
     try {
+      final monthlyRaw = _monthly.text.trim();
+      final monthlyNum = double.tryParse(monthlyRaw);
+
       await _api.updateProfile({
         'name': _name.text.trim(),
         'address': _address.text.trim(),
@@ -82,7 +92,8 @@ class _RetirementDashboardPageState extends State<RetirementDashboardPage> {
         'contact_email': _email.text.trim(),
         'contact_phone': _phone.text.trim(),
         'services': _services.text.trim(),
-        'monthly_cost': double.tryParse(_monthly.text.trim()) ?? _monthly.text.trim(),
+        // ✅ send number if possible, else keep as string
+        'monthly_cost': monthlyNum ?? monthlyRaw,
       });
 
       if (!mounted) return;
@@ -111,7 +122,7 @@ class _RetirementDashboardPageState extends State<RetirementDashboardPage> {
         child: ListTile(
           leading: Icon(icon),
           title: Text(title),
-          subtitle: Text('$value'),
+          subtitle: Text('${value ?? '-'}'),
         ),
       );
     }
@@ -121,10 +132,7 @@ class _RetirementDashboardPageState extends State<RetirementDashboardPage> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text(
-            'Overview',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
+          Text('Overview', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 8),
 
           statTile('Total Elders', stats['totalElders'] ?? '-', Icons.elderly),
@@ -151,13 +159,21 @@ class _RetirementDashboardPageState extends State<RetirementDashboardPage> {
             key: _formKey,
             child: Column(
               children: [
-                TextFormField(controller: _name, decoration: const InputDecoration(labelText: 'Name')),
+                TextFormField(
+                  controller: _name,
+                  decoration: const InputDecoration(labelText: 'Name'),
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                ),
                 TextFormField(controller: _address, decoration: const InputDecoration(labelText: 'Address')),
                 TextFormField(controller: _city, decoration: const InputDecoration(labelText: 'City')),
                 TextFormField(controller: _email, decoration: const InputDecoration(labelText: 'Contact Email')),
                 TextFormField(controller: _phone, decoration: const InputDecoration(labelText: 'Contact Phone')),
                 TextFormField(controller: _services, decoration: const InputDecoration(labelText: 'Services')),
-                TextFormField(controller: _monthly, decoration: const InputDecoration(labelText: 'Monthly Cost')),
+                TextFormField(
+                  controller: _monthly,
+                  decoration: const InputDecoration(labelText: 'Monthly Cost'),
+                  keyboardType: TextInputType.number,
+                ),
                 const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerRight,

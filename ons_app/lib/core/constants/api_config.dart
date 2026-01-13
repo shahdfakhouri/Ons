@@ -23,8 +23,11 @@ static String get elderBase => '$baseUrl/api/elder';
 static String get communityBase => '$baseUrl/api/community';
 static String get companionBase => '$baseUrl/api/companion';
 static String get entertainmentBase => '$baseUrl/api/entertainment';
+static String get medicationBase => '$baseUrl/api/medication';
+static String get retirementReportsBase => '$baseUrl/api/retirement/reports';
 
 
+  static String get retirementNotesBase => '$baseUrl/api/retirement/notes';
 
   
 }

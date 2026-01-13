@@ -278,4 +278,35 @@ class CaregiverApi {
   Future<Map<String, dynamic>> requestVisit(int elderId, Map<String, dynamic> body) async {
     return await post('/elders/$elderId/visits/request', body: body);
   }
+
+  Future<Map<String, dynamic>> logMedicationStatus(
+  int elderId, {
+  required int medicationId,
+  required String status,
+  String? scheduledTime,
+  String? notes,
+}) async {
+  final uri = Uri.parse('${ApiConfig.medicationBase}/elders/$elderId/medication-log');
+
+  final res = await _client.post(
+    uri,
+    headers: _headers(),
+    body: jsonEncode({
+      'medication_id': medicationId,
+      'status': status,
+      if (scheduledTime != null && scheduledTime.trim().isNotEmpty) 'scheduled_time': scheduledTime.trim(),
+      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+    }),
+  );
+
+  _throwIfBad(res);
+  return jsonDecode(res.body) as Map<String, dynamic>;
+}
+
+
+
+
+
+
+
 }
