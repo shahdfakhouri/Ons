@@ -1509,3 +1509,177 @@ exports.getCalendar = (req, res) => {
     });
   });
 };
+const https = require("https"); // (if not already imported elsewhere)
+
+// =====================
+// Family <-> Caregiver Chat
+// =====================
+
+// 1) Create or get conversation with a caregiver
+exports.getOrCreateChatWithCaregiver = (req, res) => {
+  const familyId = req.user.id;
+  const { caregiver_id } = req.params;
+
+  // Try get existing
+  db.query(
+    `SELECT conversation_id FROM fc_conversations WHERE family_id=? AND caregiver_id=? LIMIT 1`,
+    [familyId, caregiver_id],
+    (err, rows) => {
+      if (err) return res.status(500).json({ msg: "DB error", err });
+
+      if (rows.length) {
+        return res.json({ msg: "Conversation found", conversation_id: rows[0].conversation_id });
+      }
+
+      // Create
+      db.query(
+        `INSERT INTO fc_conversations (family_id, caregiver_id) VALUES (?, ?)`,
+        [familyId, caregiver_id],
+        (err2, result) => {
+          if (err2) return res.status(500).json({ msg: "DB error", err: err2 });
+          res.json({ msg: "Conversation created", conversation_id: result.insertId });
+        }
+      );
+    }
+  );
+};
+
+// 2) List my conversations (with last message)
+exports.listMyChats = (req, res) => {
+  const familyId = req.user.id;
+
+  const sql = `
+    SELECT
+      c.conversation_id,
+      c.created_at,
+      cg.caregiver_id,
+      cg.name AS caregiver_name,
+      cg.email AS caregiver_email,
+      lm.message AS last_message,
+      lm.created_at AS last_message_at,
+      (
+        SELECT COUNT(*)
+        FROM fc_messages m
+        WHERE m.conversation_id = c.conversation_id
+          AND m.is_read = 0
+          AND m.sender_role = 'caregiver'
+      ) AS unread_count
+    FROM fc_conversations c
+    JOIN caregivers cg ON cg.caregiver_id = c.caregiver_id
+    LEFT JOIN fc_messages lm
+      ON lm.message_id = (
+        SELECT m2.message_id
+        FROM fc_messages m2
+        WHERE m2.conversation_id = c.conversation_id
+        ORDER BY m2.created_at DESC
+        LIMIT 1
+      )
+    WHERE c.family_id = ?
+    ORDER BY COALESCE(lm.created_at, c.created_at) DESC;
+  `;
+
+  db.query(sql, [familyId], (err, rows) => {
+    if (err) return res.status(500).json({ msg: "DB error", err });
+    res.json({ msg: "Chats retrieved", chats: rows });
+  });
+};
+
+// Helper: ensure conversation belongs to this family
+function ensureFamilyInConversation(db, conversationId, familyId, cb) {
+  db.query(
+    `SELECT conversation_id FROM fc_conversations WHERE conversation_id=? AND family_id=? LIMIT 1`,
+    [conversationId, familyId],
+    (err, rows) => {
+      if (err) return cb(err);
+      if (!rows.length) return cb(null, null);
+      cb(null, rows[0]);
+    }
+  );
+}
+
+// 3) Get messages in a conversation
+exports.getChatMessages = (req, res) => {
+  const familyId = req.user.id;
+  const { conversation_id } = req.params;
+
+  const limit = Math.min(parseInt(req.query.limit || "50", 10), 100);
+  const offset = Math.max(parseInt(req.query.offset || "0", 10), 0);
+
+  ensureFamilyInConversation(db, conversation_id, familyId, (err, ok) => {
+    if (err) return res.status(500).json({ msg: "DB error", err });
+    if (!ok) return res.status(403).json({ msg: "Not allowed" });
+
+    db.query(
+      `SELECT message_id, sender_role, sender_id, message, is_read, created_at
+       FROM fc_messages
+       WHERE conversation_id=?
+       ORDER BY created_at ASC
+       LIMIT ? OFFSET ?`,
+      [conversation_id, limit, offset],
+      (err2, rows) => {
+        if (err2) return res.status(500).json({ msg: "DB error", err: err2 });
+        res.json({ msg: "Messages retrieved", messages: rows });
+      }
+    );
+  });
+};
+
+// 4) Send message
+exports.sendChatMessage = (req, res) => {
+  const familyId = req.user.id;
+  const { conversation_id } = req.params;
+  const { message } = req.body;
+
+  if (!message || !message.trim()) {
+    return res.status(400).json({ msg: "Message is required" });
+  }
+
+  ensureFamilyInConversation(db, conversation_id, familyId, (err, ok) => {
+    if (err) return res.status(500).json({ msg: "DB error", err });
+    if (!ok) return res.status(403).json({ msg: "Not allowed" });
+
+    db.query(
+      `INSERT INTO fc_messages (conversation_id, sender_role, sender_id, message)
+       VALUES (?, 'family', ?, ?)`,
+      [conversation_id, familyId, message.trim()],
+      (err2, result) => {
+        if (err2) return res.status(500).json({ msg: "DB error", err: err2 });
+
+        res.json({
+          msg: "Message sent",
+          message: {
+            message_id: result.insertId,
+            conversation_id: Number(conversation_id),
+            sender_role: "family",
+            sender_id: familyId,
+            message: message.trim()
+          }
+        });
+      }
+    );
+  });
+};
+
+// 5) Mark caregiver messages as read
+exports.markChatRead = (req, res) => {
+  const familyId = req.user.id;
+  const { conversation_id } = req.params;
+
+  ensureFamilyInConversation(db, conversation_id, familyId, (err, ok) => {
+    if (err) return res.status(500).json({ msg: "DB error", err });
+    if (!ok) return res.status(403).json({ msg: "Not allowed" });
+
+    db.query(
+      `UPDATE fc_messages
+       SET is_read = 1
+       WHERE conversation_id = ?
+         AND sender_role = 'caregiver'
+         AND is_read = 0`,
+      [conversation_id],
+      (err2) => {
+        if (err2) return res.status(500).json({ msg: "DB error", err: err2 });
+        res.json({ msg: "Chat marked as read" });
+      }
+    );
+  });
+};

@@ -62,5 +62,13 @@ router.post("/elders/:elder_id/visits/request", ensureAssignedToElder, caregiver
 router.get("/alerts", caregiverController.getMyAlerts);
 router.get("/elders/:elder_id/alerts", ensureAssignedToElder, caregiverController.getElderAlerts);
 
+// =====================
+// Family <-> Caregiver Chat
+// =====================
+router.get("/chats", caregiverController.listMyChats);
+router.get("/chats/:conversation_id/messages", caregiverController.getChatMessages);
+router.post("/chats/:conversation_id/messages", caregiverController.sendChatMessage);
+router.patch("/chats/:conversation_id/read", caregiverController.markChatRead);
+
 
 module.exports = router;

@@ -102,6 +102,16 @@ router.delete("/events/:event_id", familyController.deleteEvent);
 // Combined shared calendar feed (events + visits)
 router.get("/calendar", familyController.getCalendar);
 
+// =====================
+// Family <-> Caregiver Chat
+// =====================
+router.post("/chats/caregiver/:caregiver_id", verifyToken, allowRoles(["family"]), familyController.getOrCreateChatWithCaregiver);
+router.get("/chats", verifyToken, allowRoles(["family"]), familyController.listMyChats);
+router.get("/chats/:conversation_id/messages", verifyToken, allowRoles(["family"]), familyController.getChatMessages);
+router.post("/chats/:conversation_id/messages", verifyToken, allowRoles(["family"]), familyController.sendChatMessage);
+router.patch("/chats/:conversation_id/read", verifyToken, allowRoles(["family"]), familyController.markChatRead);
+
+
 // Future work endpoints (optional placeholders)
 //router.post("/calls/request", familyController.futureNotImplemented);
 //router.get("/calls/history", familyController.futureNotImplemented);

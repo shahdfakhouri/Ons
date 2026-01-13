@@ -654,3 +654,117 @@ exports.deleteMyMedia = (req, res) => {
     }
   );
 };
+const http = require("http");
+const https = require("https");
+
+function httpGet(url) {
+  return new Promise((resolve, reject) => {
+    const lib = url.startsWith("https") ? https : http;
+
+    lib.get(url, (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => resolve({ status: res.statusCode, data }));
+    }).on("error", reject);
+  });
+}
+
+function extractTag(block, tag) {
+  const cdata = new RegExp(`<${tag}><!\\[CDATA\\[([\\s\\S]*?)\\]\\]><\\/${tag}>`, "i");
+  const normal = new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "i");
+  let m = block.match(cdata);
+  if (m) return m[1].trim();
+  m = block.match(normal);
+  if (m) return m[1].replace(/<[^>]+>/g, "").trim();
+  return null;
+}
+
+exports.getElderNews = async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit || "10"), 20);
+
+    const feedUrl = "https://feeds.bbci.co.uk/news/world/rss.xml";
+
+    const { status, data } = await httpGet(feedUrl);
+    if (status >= 400) {
+      return res.status(502).json({ msg: "Failed to fetch RSS feed" });
+    }
+
+    const items = [...data.matchAll(/<item>([\s\S]*?)<\/item>/gi)]
+      .slice(0, limit)
+      .map((m) => {
+        const block = m[1];
+        return {
+          title: extractTag(block, "title"),
+          link: extractTag(block, "link"),
+          pubDate: extractTag(block, "pubDate"),
+          description: extractTag(block, "description")
+        };
+      });
+
+    res.json({ msg: "News retrieved", items });
+  } catch (err) {
+    res.status(500).json({ msg: "Error getting news", err: String(err) });
+  }
+};
+
+
+// 2) WEATHER (Open-Meteo)
+// Uses query lat/lon OR elder latest location from elder_location
+exports.getElderWeather = async (req, res) => {
+  try {
+    const elderId = req.user.elder_id;
+
+    let lat = req.query.lat ? parseFloat(req.query.lat) : null;
+    let lon = req.query.lon ? parseFloat(req.query.lon) : null;
+
+    // if not provided, use latest elder_location
+    if (lat == null || lon == null || Number.isNaN(lat) || Number.isNaN(lon)) {
+      const loc = await new Promise((resolve, reject) => {
+        db.query(
+          `SELECT latitude, longitude, recorded_at
+           FROM elder_location
+           WHERE elder_id = ?
+           ORDER BY recorded_at DESC
+           LIMIT 1`,
+          [elderId],
+          (err, rows) => {
+            if (err) return reject(err);
+            resolve(rows && rows.length ? rows[0] : null);
+          }
+        );
+      });
+
+      if (!loc || loc.latitude == null || loc.longitude == null) {
+        return res.status(400).json({
+          msg: "No location found for elder. Send lat/lon in query or store elder_location first."
+        });
+      }
+
+      lat = Number(loc.latitude);
+      lon = Number(loc.longitude);
+    }
+
+    const url =
+      `https://api.open-meteo.com/v1/forecast` +
+      `?latitude=${encodeURIComponent(lat)}` +
+      `&longitude=${encodeURIComponent(lon)}` +
+      `&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m` +
+      `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum` +
+      `&timezone=auto`;
+
+    const { status, data } = await httpsGet(url);
+    if (status >= 400) return res.status(502).json({ msg: "Failed to fetch weather" });
+
+    const json = JSON.parse(data);
+    res.json({
+      msg: "Weather retrieved",
+      lat,
+      lon,
+      current: json.current,
+      daily: json.daily
+    });
+  } catch (err) {
+    res.status(500).json({ msg: "Error getting weather", err: String(err) });
+  }
+};
