@@ -236,19 +236,37 @@ exports.getFamilyMatches = (req, res) => {
 };
 
 // ✅ Approve a selected match
+// ✅ Approve a selected match
 exports.approveMatch = (req, res) => {
   const { match_id } = req.params;
 
-  const sql = `
-    UPDATE matches
-    SET approved_by_admin = 1, status = 'approved'
-    WHERE match_id = ?;
-  `;
+  // get match first (so we know family_id)
+  db.query(`SELECT * FROM matches WHERE match_id=? LIMIT 1`, [match_id], (e1, rows) => {
+    if (e1) return res.status(500).json({ msg: "DB error", err: e1 });
+    if (!rows.length) return res.status(404).json({ msg: "Match not found" });
 
-  db.query(sql, [match_id], (err, result) => {
-    if (err) return res.status(500).json({ msg: "DB error approving match", err });
-    if (result.affectedRows === 0) return res.status(404).json({ msg: "Match not found" });
-    res.status(200).json({ msg: "Match approved successfully" });
+    const match = rows[0];
+
+    db.query(
+      `UPDATE matches SET approved_by_admin = 1, status = 'approved' WHERE match_id = ?;`,
+      [match_id],
+      (e2, result) => {
+        if (e2) return res.status(500).json({ msg: "DB error approving match", err: e2 });
+
+        // ✅ notify family
+        db.query(
+          `INSERT INTO notifications (recipient_role, recipient_id, category, title, message)
+           VALUES ('family', ?, 'system', 'Match Approved ✅', ?)`,
+          [
+            match.family_id,
+            `Your match request was approved. You can now assign the ${match.matched_role}. (match_id=${match_id})`
+          ],
+          () => {}
+        );
+
+        res.status(200).json({ msg: "Match approved successfully" });
+      }
+    );
   });
 };
 

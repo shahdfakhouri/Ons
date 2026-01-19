@@ -1,169 +1,213 @@
+// /controllers/payment.controller.js
 const db = require("../config/db");
 const paypal = require("@paypal/checkout-server-sdk");
 const { client } = require("../paypalConfig");
 
 // 🟢 Get all pending payments (for family)
 exports.getPendingPayments = (req, res) => {
-  const userId = req.user.id;
-  const sql = "SELECT * FROM payments WHERE status='pending' AND payer_id=?";
-  db.query(sql, [userId], (err, result) => {
+  const familyId = req.user.id;
+  const sql = "SELECT * FROM payments WHERE status='pending' AND family_id=?";
+  db.query(sql, [familyId], (err, result) => {
     if (err) return res.status(500).json({ msg: "Error retrieving payments", err });
-    res.status(200).json(result);
+    res.status(200).json({ payments: result });
   });
 };
 
-// 🟡 Execute payment (PayPal or on-arrival)
-exports.executePayment = (req, res) => {
-  const { paymentId, method } = req.body;
-  const userId = req.user.id;
-
-  if (!["paypal", "on_arrival"].includes(method))
-    return res.status(400).json({ msg: "Invalid payment method" });
-
-  db.query(
-    "SELECT * FROM payments WHERE payment_id=? AND payer_id=? AND status='pending'",
-    [paymentId, userId],
-    (err, results) => {
-      if (err) return res.status(500).json({ msg: "Database error", err });
-      if (results.length === 0)
-        return res.status(404).json({ msg: "Payment not found or already completed" });
-
-      const payment = results[0];
-      const status = method === "on_arrival" ? "completed" : "pending";
-
-      db.query(
-        "UPDATE payments SET method=?, status=? WHERE payment_id=?",
-        [method, status, paymentId],
-        (err2) => {
-          if (err2) return res.status(500).json({ msg: "Error updating payment", err2 });
-          res.status(200).json({ msg: `Payment ${status} via ${method}` });
-        }
-      );
-    }
-  );
-};
-
-// 💰 Get platform total revenue (Admin only)
-exports.getPlatformRevenue = (req, res) => {
-  const sql = "SELECT SUM(amount) AS total_revenue FROM transactions WHERE type='platform_fee'";
-  db.query(sql, (err, result) => {
-    if (err) return res.status(500).json({ msg: "Error fetching revenue", err });
-    res.status(200).json({ totalRevenue: result[0].total_revenue || 0 });
-  });
-};
-
-// 🧾 Get caregiver / retirement_home revenue (based on transactions schema)
-exports.getReceiverRevenue = (req, res) => {
-  const userId = req.user.id;
-  const role = (req.user.role || "").toLowerCase();
-
-  // caregiver earns via payout to caregiver
-  // retirement_home earns via transfer to retirement_home
-  let where = "";
-  let params = [];
-
-  if (role === "caregiver") {
-    where = "to_role = 'caregiver' AND to_id = ? AND type = 'payout'";
-    params = [userId];
-  } else if (role === "retirement_home") {
-    where = "to_role = 'retirement_home' AND to_id = ? AND type = 'transfer'";
-    params = [userId];
-  } else {
-    return res.status(403).json({ msg: "Only caregivers or retirement homes can view receiver revenue" });
-  }
-
-  db.query(
-    `SELECT COALESCE(SUM(amount), 0) AS total_revenue
-     FROM transactions
-     WHERE ${where}`,
-    params,
-    (err, rows) => {
-      if (err) return res.status(500).json({ msg: "Error fetching revenue", err });
-      res.status(200).json({
-        role,
-        user_id: userId,
-        totalRevenue: rows[0].total_revenue
-      });
-    }
-  );
-};
-
-
-// 🧩 Create PayPal order
+// 🧩 Create PayPal order (linked to a paymentId)
 exports.createPayment = async (req, res) => {
-  const { amount } = req.body;
+  const familyId = req.user.id;
+  const { amount, paymentId } = req.body;
 
-  const request = new paypal.orders.OrdersCreateRequest();
-  request.requestBody({
-    intent: "CAPTURE",
-    purchase_units: [{ amount: { currency_code: "USD", value: amount.toFixed(2) } }],
-    application_context: {
-      brand_name: "ElderCare",
-      return_url: "http://localhost:5000/api/payments/capture",
-      cancel_url: "http://localhost:5000/api/payments/cancel",
-    },
-  });
-
-  try {
-    const order = await client().execute(request);
-    const approveUrl = order.result.links.find((link) => link.rel === "approve").href;
-    res.status(200).json({ approveUrl });
-  } catch (error) {
-    console.error("PayPal error:", error);
-    res.status(500).json({ msg: "Error creating PayPal payment" });
-  }
-};
-
-// 🟢 Capture PayPal payment
-exports.capturePayment = async (req, res) => {
-  const { orderId, paymentId } = req.query;
-  if (!orderId || !paymentId)
-    return res.status(400).json({ msg: "Missing PayPal order or payment ID" });
-
-  const captureRequest = new paypal.orders.OrdersCaptureRequest(orderId);
-  captureRequest.requestBody({});
-
-  try {
-    const capture = await client().execute(captureRequest);
-    if (capture.result.status === "COMPLETED") {
-      db.query("UPDATE payments SET status='completed' WHERE payment_id=?", [paymentId]);
-      res.status(200).json({ msg: "Payment completed successfully" });
-    } else {
-      res.status(400).json({ msg: "Payment not completed" });
-    }
-  } catch (error) {
-    console.error("Capture error:", error);
-    res.status(500).json({ msg: "Error capturing PayPal payment" });
-  }
-};
-exports.getReceiverTransactions = (req, res) => {
-  const userId = req.user.id;
-  const role = (req.user.role || "").toLowerCase();
-  const limit = Math.min(Number(req.query.limit || 50), 500);
-
-  let where = "";
-  let params = [];
-
-  if (role === "caregiver") {
-    where = "to_role='caregiver' AND to_id=? AND type='payout'";
-    params = [userId];
-  } else if (role === "retirement_home") {
-    where = "to_role='retirement_home' AND to_id=? AND type='transfer'";
-    params = [userId];
-  } else {
-    return res.status(403).json({ msg: "Only caregivers or retirement homes can view earnings history" });
+  if (!paymentId || !amount) {
+    return res.status(400).json({ msg: "paymentId and amount are required" });
   }
 
+  // ✅ Verify payment belongs to this family and is pending
   db.query(
-    `SELECT transaction_id, payment_id, from_role, from_id, to_role, to_id, amount, type, created_at
-     FROM transactions
-     WHERE ${where}
-     ORDER BY created_at DESC
-     LIMIT ?`,
-    [...params, limit],
-    (err, rows) => {
-      if (err) return res.status(500).json({ msg: "Error fetching transactions", err });
-      res.status(200).json({ role, user_id: userId, transactions: rows });
+    "SELECT * FROM payments WHERE payment_id=? AND family_id=? AND status='pending'",
+    [paymentId, familyId],
+    async (err, rows) => {
+      if (err) return res.status(500).json({ msg: "Database error", err });
+      if (!rows.length) return res.status(404).json({ msg: "Pending payment not found for this user" });
+
+      const request = new paypal.orders.OrdersCreateRequest();
+      request.requestBody({
+        intent: "CAPTURE",
+        purchase_units: [{ amount: { currency_code: "USD", value: Number(amount).toFixed(2) } }],
+        application_context: {
+          brand_name: "ONS ElderCare",
+          // Not used by the app flow; the app will call /capture itself
+          return_url: "http://localhost:5000/",
+          cancel_url: "http://localhost:5000/",
+        },
+      });
+
+      try {
+        const order = await client().execute(request);
+        const approveUrl = order.result.links.find((link) => link.rel === "approve").href;
+
+        res.status(200).json({
+          approveUrl,
+          orderId: order.result.id, // ✅ IMPORTANT for capture
+        });
+      } catch (error) {
+        console.error("PayPal error:", error);
+        res.status(500).json({ msg: "Error creating PayPal order" });
+      }
     }
   );
+};
+
+// 🟢 Capture PayPal payment + finalize DB transactions
+exports.capturePayment = async (req, res) => {
+  const familyId = req.user.id;
+  const { orderId, paymentId } = req.query;
+
+  if (!orderId || !paymentId) {
+    return res.status(400).json({ msg: "Missing PayPal orderId or paymentId" });
+  }
+
+  // ✅ Verify payment belongs to this family and is pending
+  db.query(
+    "SELECT * FROM payments WHERE payment_id=? AND family_id=? AND status='pending'",
+    [paymentId, familyId],
+    async (err, rows) => {
+      if (err) return res.status(500).json({ msg: "Database error", err });
+      if (!rows.length) return res.status(404).json({ msg: "Pending payment not found" });
+
+      const payment = rows[0];
+
+      const captureRequest = new paypal.orders.OrdersCaptureRequest(orderId);
+      captureRequest.requestBody({});
+
+      try {
+        const capture = await client().execute(captureRequest);
+
+        if (capture.result.status !== "COMPLETED") {
+          return res.status(400).json({ msg: "PayPal capture not completed" });
+        }
+
+        // ✅ Mark payment completed
+        db.query("UPDATE payments SET status='completed', method='paypal' WHERE payment_id=?", [paymentId]);
+
+        // ✅ If transactions already exist for this payment, don't duplicate
+        db.query(
+          "SELECT COUNT(*) AS cnt FROM transactions WHERE payment_id=?",
+          [paymentId],
+          (err2, cntRows) => {
+            if (err2) return res.status(500).json({ msg: "Error checking transactions", err: err2 });
+
+            if ((cntRows[0].cnt || 0) > 0) {
+              return res.status(200).json({ msg: "Payment completed ✅ (transactions already recorded)" });
+            }
+
+            const amount = Number(payment.amount);
+            const family = payment.family_id;
+            const targetId = payment.target_id;
+
+            // Finalize transactions based on target_type
+            if (payment.target_type === "caregiver") {
+              const caregiverShare = (amount * 0.9).toFixed(2);
+              const platformFee = (amount * 0.1).toFixed(2);
+
+              const sql = `
+                INSERT INTO transactions (payment_id, from_role, to_role, from_id, to_id, amount, type)
+                VALUES
+                (?, 'family', 'caregiver', ?, ?, ?, 'payout'),
+                (?, 'family', 'system', ?, NULL, ?, 'platform_fee')
+              `;
+              return db.query(
+                sql,
+                [paymentId, family, targetId, caregiverShare, paymentId, family, platformFee],
+                (e3) => {
+                  if (e3) return res.status(500).json({ msg: "Error finalizing transactions", err: e3 });
+                  res.status(200).json({ msg: "Payment completed ✅" });
+                }
+              );
+            }
+
+            if (payment.target_type === "pharmacy") {
+              const platformFee = (amount * 0.05).toFixed(2);
+              const pharmacyShare = (amount * 0.95).toFixed(2);
+
+              const sql = `
+                INSERT INTO transactions (payment_id, from_role, to_role, from_id, to_id, amount, type)
+                VALUES
+                (?, 'family', 'pharmacy', ?, ?, ?, 'medicine'),
+                (?, 'family', 'system', ?, NULL, ?, 'platform_fee')
+              `;
+              return db.query(
+                sql,
+                [paymentId, family, targetId, pharmacyShare, paymentId, family, platformFee],
+                (e3) => {
+                  if (e3) return res.status(500).json({ msg: "Error finalizing transactions", err: e3 });
+                  res.status(200).json({ msg: "Payment completed ✅" });
+                }
+              );
+            }
+
+            // retirement_home PayPal is blocked in transactions controller; just in case:
+            return res.status(200).json({
+              msg: "Payment completed ✅ (no transaction rule for this target_type)",
+            });
+          }
+        );
+      } catch (error) {
+        console.error("Capture error:", error);
+        res.status(500).json({ msg: "Error capturing PayPal payment" });
+      }
+    }
+  );
+};
+
+// 🟣 Admin: Platform revenue (sum of system platform fees)
+exports.getPlatformRevenue = (req, res) => {
+  // If you have roles in req.user, you can enforce admin here
+  // if (req.user.role !== "admin") return res.status(403).json({ msg: "Forbidden" });
+
+  const sql = `
+    SELECT IFNULL(SUM(amount), 0) AS platform_revenue
+    FROM transactions
+    WHERE to_role = 'system' AND type = 'platform_fee'
+  `;
+
+  db.query(sql, (err, rows) => {
+    if (err) return res.status(500).json({ msg: "Error fetching platform revenue", err });
+    res.status(200).json({ platform_revenue: rows[0]?.platform_revenue ?? 0 });
+  });
+};
+
+// 🟣 Caregiver/Retirement Home: Receiver revenue (sum of payouts/medicine sent to them)
+exports.getReceiverRevenue = (req, res) => {
+  const receiverId = req.user.id;
+  const receiverRole = req.user.role; // must be 'caregiver' or 'retirement_home'
+
+  const sql = `
+    SELECT IFNULL(SUM(amount), 0) AS receiver_revenue
+    FROM transactions
+    WHERE to_role = ? AND to_id = ?
+  `;
+
+  db.query(sql, [receiverRole, receiverId], (err, rows) => {
+    if (err) return res.status(500).json({ msg: "Error fetching receiver revenue", err });
+    res.status(200).json({ receiver_revenue: rows[0]?.receiver_revenue ?? 0 });
+  });
+};
+
+// 🟣 Caregiver/Retirement Home: Receiver transactions list
+exports.getReceiverTransactions = (req, res) => {
+  const receiverId = req.user.id;
+  const receiverRole = req.user.role;
+
+  const sql = `
+    SELECT *
+    FROM transactions
+    WHERE to_role = ? AND to_id = ?
+    ORDER BY transaction_id DESC
+  `;
+
+  db.query(sql, [receiverRole, receiverId], (err, rows) => {
+    if (err) return res.status(500).json({ msg: "Error fetching receiver transactions", err });
+    res.status(200).json({ transactions: rows });
+  });
 };

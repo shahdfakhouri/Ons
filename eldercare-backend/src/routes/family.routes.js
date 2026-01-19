@@ -110,7 +110,7 @@ router.get("/chats", verifyToken, allowRoles(["family"]), familyController.listM
 router.get("/chats/:conversation_id/messages", verifyToken, allowRoles(["family"]), familyController.getChatMessages);
 router.post("/chats/:conversation_id/messages", verifyToken, allowRoles(["family"]), familyController.sendChatMessage);
 router.patch("/chats/:conversation_id/read", verifyToken, allowRoles(["family"]), familyController.markChatRead);
-
+router.post("/matches/:match_id/select", familyController.selectMatch);
 
 // Future work endpoints (optional placeholders)
 //router.post("/calls/request", familyController.futureNotImplemented);

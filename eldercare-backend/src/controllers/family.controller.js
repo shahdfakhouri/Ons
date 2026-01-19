@@ -231,54 +231,158 @@ exports.getMatches = (req, res) => {
 exports.assignCaregiver = (req, res) => {
   const familyId = req.user.id;
   const { elder_id, caregiver_id } = req.body || {};
-  if (!elder_id || !caregiver_id) return res.status(400).json({ msg: "elder_id and caregiver_id are required" });
 
-  // Ensure elder belongs to family first
+  if (!elder_id || !caregiver_id) {
+    return res.status(400).json({ msg: "elder_id and caregiver_id are required" });
+  }
+
+  // 1) Ensure elder belongs to family
   db.query(
     `SELECT 1 FROM elder_family WHERE family_id = ? AND elder_id = ? LIMIT 1`,
     [familyId, elder_id],
     (err, ok) => {
       if (err) return res.status(500).json({ msg: "DB error", err });
-      if (!ok.length) return res.status(403).json({ msg: "Access denied: elder not linked to this family" });
+      if (!ok.length) {
+        return res.status(403).json({ msg: "Access denied: elder not linked to this family" });
+      }
 
-      const sql = `
-        INSERT INTO elder_assignments (elder_id, caregiver_id, home_id, assigned_by)
-        VALUES (?, ?, NULL, ?)
-      `;
-      db.query(sql, [elder_id, caregiver_id, familyId], (err2, result) => {
-        if (err2) return res.status(500).json({ msg: "Error assigning caregiver", err: err2 });
-        res.status(201).json({ msg: "Caregiver assigned ✅", assignment_id: result.insertId });
-      });
+      // 2) Ensure match is approved (family <-> caregiver)
+      db.query(
+        `SELECT 1
+         FROM matches
+         WHERE family_id = ?
+           AND matched_role = 'caregiver'
+           AND matched_id = ?
+           AND status = 'approved'
+         LIMIT 1`,
+        [familyId, caregiver_id],
+        (err2, approved) => {
+          if (err2) return res.status(500).json({ msg: "DB error checking match approval", err: err2 });
+          if (!approved.length) {
+            return res.status(403).json({
+              msg: "This caregiver is not approved yet. Please select the match and wait for admin approval."
+            });
+          }
+
+          // 3) Prevent duplicate active assignment for same elder+caregiver (optional but recommended)
+          db.query(
+            `SELECT assignment_id
+             FROM elder_assignments
+             WHERE elder_id = ? AND caregiver_id = ? AND home_id IS NULL
+             ORDER BY assigned_at DESC
+             LIMIT 1`,
+            [elder_id, caregiver_id],
+            (err3, existing) => {
+              if (err3) return res.status(500).json({ msg: "DB error checking existing assignment", err: err3 });
+              if (existing.length) {
+                return res.status(200).json({
+                  msg: "Caregiver already assigned ✅",
+                  assignment_id: existing[0].assignment_id
+                });
+              }
+
+              // 4) Insert assignment
+              const sql = `
+                INSERT INTO elder_assignments (elder_id, caregiver_id, home_id, assigned_by)
+                VALUES (?, ?, NULL, ?)
+              `;
+              db.query(sql, [elder_id, caregiver_id, familyId], (err4, result) => {
+                if (err4) return res.status(500).json({ msg: "Error assigning caregiver", err: err4 });
+
+                res.status(201).json({
+                  msg: "Caregiver assigned ✅",
+                  assignment_id: result.insertId
+                });
+              });
+            }
+          );
+        }
+      );
     }
   );
 };
 
+
 exports.selectHome = (req, res) => {
   const familyId = req.user.id;
   const { elder_id, home_id } = req.body || {};
-  if (!elder_id || !home_id) return res.status(400).json({ msg: "elder_id and home_id are required" });
 
+  if (!elder_id || !home_id) {
+    return res.status(400).json({ msg: "elder_id and home_id are required" });
+  }
+
+  // 1) Ensure elder belongs to family
   db.query(
     `SELECT 1 FROM elder_family WHERE family_id = ? AND elder_id = ? LIMIT 1`,
     [familyId, elder_id],
     (err, ok) => {
       if (err) return res.status(500).json({ msg: "DB error", err });
-      if (!ok.length) return res.status(403).json({ msg: "Access denied: elder not linked to this family" });
+      if (!ok.length) {
+        return res.status(403).json({ msg: "Access denied: elder not linked to this family" });
+      }
 
-      // Update elders.home_id
-      db.query(`UPDATE elders SET home_id = ? WHERE elder_id = ?`, [home_id, elder_id], (err2) => {
-        if (err2) return res.status(500).json({ msg: "Error linking elder to home", err: err2 });
+      // 2) Ensure match is approved (family <-> retirement_home)
+      db.query(
+        `SELECT 1
+         FROM matches
+         WHERE family_id = ?
+           AND matched_role = 'retirement_home'
+           AND matched_id = ?
+           AND status = 'approved'
+         LIMIT 1`,
+        [familyId, home_id],
+        (err2, approved) => {
+          if (err2) return res.status(500).json({ msg: "DB error checking match approval", err: err2 });
+          if (!approved.length) {
+            return res.status(403).json({
+              msg: "This retirement home is not approved yet. Please select the match and wait for admin approval."
+            });
+          }
 
-        // Add assignment row too (home assignment)
-        const sql = `
-          INSERT INTO elder_assignments (elder_id, caregiver_id, home_id, assigned_by)
-          VALUES (?, NULL, ?, ?)
-        `;
-        db.query(sql, [elder_id, home_id, familyId], (err3, result) => {
-          if (err3) return res.status(500).json({ msg: "Home linked but assignment insert failed", err: err3 });
-          res.status(201).json({ msg: "Retirement home selected ✅", assignment_id: result.insertId });
-        });
-      });
+          // 3) Update elders.home_id
+          db.query(`UPDATE elders SET home_id = ? WHERE elder_id = ?`, [home_id, elder_id], (err3) => {
+            if (err3) return res.status(500).json({ msg: "Error linking elder to home", err: err3 });
+
+            // 4) Prevent duplicate home assignment rows (optional but recommended)
+            db.query(
+              `SELECT assignment_id
+               FROM elder_assignments
+               WHERE elder_id = ? AND home_id = ? AND caregiver_id IS NULL
+               ORDER BY assigned_at DESC
+               LIMIT 1`,
+              [elder_id, home_id],
+              (err4, existing) => {
+                if (err4) return res.status(500).json({ msg: "DB error checking existing assignment", err: err4 });
+
+                if (existing.length) {
+                  return res.status(200).json({
+                    msg: "Retirement home already selected ✅",
+                    assignment_id: existing[0].assignment_id
+                  });
+                }
+
+                // 5) Insert assignment row too (home assignment)
+                const sql = `
+                  INSERT INTO elder_assignments (elder_id, caregiver_id, home_id, assigned_by)
+                  VALUES (?, NULL, ?, ?)
+                `;
+                db.query(sql, [elder_id, home_id, familyId], (err5, result) => {
+                  if (err5) {
+                    return res.status(500).json({
+                      msg: "Home linked but assignment insert failed",
+                      err: err5
+                    });
+                  }
+                  res.status(201).json({
+                    msg: "Retirement home selected ✅",
+                    assignment_id: result.insertId
+                  });
+                });
+              }
+            );
+          });
+        }
+      );
     }
   );
 };
@@ -1682,4 +1786,65 @@ exports.markChatRead = (req, res) => {
       }
     );
   });
+};
+
+
+// ✅ Family selects ONE match and requests admin approval (status stays pending)
+exports.selectMatch = (req, res) => {
+  const familyId = req.user.id;
+  const { match_id } = req.params;
+
+  // 1) Ensure match belongs to this family
+  db.query(
+    `SELECT * FROM matches WHERE match_id=? AND family_id=? LIMIT 1`,
+    [match_id, familyId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ msg: "DB error", err });
+      if (!rows.length) return res.status(404).json({ msg: "Match not found" });
+
+      const match = rows[0];
+
+      // 2) Unselect all, select this one (keeps status pending until admin approves)
+      db.query(
+        `UPDATE matches
+         SET selected_by_family = CASE
+         WHEN match_id = ? THEN 1
+         ELSE 0
+         END
+         WHERE family_id = ?;`,
+        [match_id, familyId],
+        (err2) => {
+          if (err2) return res.status(500).json({ msg: "DB error selecting match", err: err2 });
+
+          // 3) Notify FAMILY: pending
+          db.query(
+            `INSERT INTO notifications (recipient_role, recipient_id, category, title, message)
+             VALUES ('family', ?, 'system', 'Match Pending', ?)`,
+            [
+              familyId,
+              `Your match request is pending admin approval (match_id=${match_id}).`
+            ],
+            () => {} // ignore small insert errors
+          );
+
+          // 4) Notify ADMIN (admin_notifications table has no "match" type, so use 'alert')
+          db.query(
+            `INSERT INTO admin_notifications (type, message, user_id, severity)
+             VALUES ('alert', ?, ?, 'info')`,
+            [
+              `New match approval requested: family_id=${familyId}, match_id=${match_id}, matched_role=${match.matched_role}, matched_id=${match.matched_id}`,
+              familyId
+            ],
+            () => {}
+          );
+
+          return res.status(200).json({
+            msg: "Match selected. Waiting for admin approval ⏳",
+            match_id: Number(match_id),
+            status: match.status // should be 'pending'
+          });
+        }
+      );
+    }
+  );
 };
