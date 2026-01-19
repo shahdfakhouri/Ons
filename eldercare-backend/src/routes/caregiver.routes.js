@@ -1,7 +1,11 @@
 const express = require("express");
 const router = express.Router();
 
+
+
 const verifyToken = require("../middleware/authmiddleware");
+const upload = require("../middleware/uploadMiddleware"); // ✅ ADD THIS
+
 const allowRoles = require("../middleware/roleMiddleware");
 const ensureAssignedToElder = require("../middleware/ensureAssignedToElder");
 
@@ -69,6 +73,9 @@ router.get("/chats", caregiverController.listMyChats);
 router.get("/chats/:conversation_id/messages", caregiverController.getChatMessages);
 router.post("/chats/:conversation_id/messages", caregiverController.sendChatMessage);
 router.patch("/chats/:conversation_id/read", caregiverController.markChatRead);
+
+
+router.post("/me/cv", verifyToken, upload.single("cv"), caregiverController.uploadMyCV);
 
 
 module.exports = router;

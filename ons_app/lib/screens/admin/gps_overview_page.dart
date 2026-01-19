@@ -63,7 +63,8 @@ class _GpsOverviewPageState extends State<GpsOverviewPage> {
     return _rows.where((r) {
       final elderName = _v(r['elder_name']).toLowerCase();
       final elderId = _v(r['elder_id']).toLowerCase();
-      return elderName.contains(q) || elderId.contains(q);
+      final place = _v(r['place_name'], fallback: '').toLowerCase(); // ✅ NEW searchable
+      return elderName.contains(q) || elderId.contains(q) || place.contains(q);
     }).toList();
   }
 
@@ -104,7 +105,7 @@ class _GpsOverviewPageState extends State<GpsOverviewPage> {
                                 controller: _searchCtrl,
                                 onChanged: (_) => setState(() {}),
                                 decoration: const InputDecoration(
-                                  labelText: 'Search (elder name / id)',
+                                  labelText: 'Search (elder name / id / place)',
                                   border: OutlineInputBorder(),
                                 ),
                               ),
@@ -135,18 +136,22 @@ class _GpsOverviewPageState extends State<GpsOverviewPage> {
                                 final lat = _v(r['latitude']);
                                 final lng = _v(r['longitude']);
 
+                                // ✅ NEW
+                                final place = _v(r['place_name'], fallback: '');
+
+                                final subtitleLines = <String>[
+                                  'Last seen: $lastSeen',
+                                  if (place.isNotEmpty) 'Place: $place',
+                                  'Lat: $lat',
+                                  'Lng: $lng',
+                                ];
+
                                 return Card(
                                   margin: const EdgeInsets.symmetric(vertical: 8),
                                   child: ListTile(
                                     leading: const Icon(Icons.location_on_outlined),
                                     title: Text('$elderName (ID: $elderId)'),
-                                    subtitle: Text(
-                                      [
-                                        'Last seen: $lastSeen',
-                                        'Lat: $lat',
-                                        'Lng: $lng',
-                                      ].join('\n'),
-                                    ),
+                                    subtitle: Text(subtitleLines.join('\n')),
                                     trailing: TextButton(
                                       onPressed: () {
                                         Navigator.of(context).push(

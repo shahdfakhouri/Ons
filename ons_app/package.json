@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "pdf-parse-fixed": "^1.1.1"
+  }
+}

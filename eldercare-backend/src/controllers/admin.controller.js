@@ -3,14 +3,16 @@ const db = require("../config/db");
 const fs = require("fs");
 const path = require("path");
 const OpenAI = require("openai");
+const pdfParse = require("pdf-parse-fixed");
 
-// ✅ Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+
+
+const analyzerOpenAI = new OpenAI({
+  apiKey: process.env.OPENAI_ANALYZER_API_KEY || process.env.OPENAI_API_KEY,
 });
 
-// ✅ Dynamically import pdf-parse for Node v22+ compatibility
-const pdf = require("pdf-parse-fixed");
+const ANALYZER_MODEL = process.env.OPENAI_ANALYZER_MODEL || "gpt-4o-mini";
+
 
 
 // 🧾 Get all users (caregivers + retirement homes + families + elders)
@@ -43,14 +45,50 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
+function resolveUploadPath(cvPathFromDb) {
+  if (!cvPathFromDb) return null;
+
+  // If stored like "/uploads/file.pdf" or "uploads/file.pdf"
+  const looksLikeWebPath =
+    cvPathFromDb.startsWith("/uploads/") || cvPathFromDb.startsWith("uploads/");
+
+  if (looksLikeWebPath) {
+    const relative = cvPathFromDb.replace(/^\/+/, ""); // remove leading /
+    const projectRoot = path.join(__dirname, "../.."); // eldercare-backend/
+    return path.join(projectRoot, relative); // eldercare-backend/uploads/file.pdf
+  }
+
+  // Otherwise assume it's already absolute filesystem path
+  return cvPathFromDb;
+}
+
+
+
+
+
 // ✅ Get pending approvals (caregivers + retirement homes)
 exports.getPendingApprovals = (req, res) => {
   const queries = [
-    // 🛠️ Added city to the caregiver query
-    "SELECT caregiver_id AS id, name, email, phone, employment_type, ai_score, ai_feedback, city, 'caregiver' AS role FROM caregivers WHERE is_approved = 0",
-    
-    // City is already here for retirement homes
-"SELECT home_id AS id, name, contact_email AS email, contact_phone AS phone, city, services, 'retirement_home' AS role FROM retirement_homes WHERE is_approved = 0"  ];
+    // ✅ add cv fields
+    `
+    SELECT caregiver_id AS id, name, email, phone, employment_type,
+       ai_score, ai_feedback, city,
+       cv_path, cv_original_name, cv_uploaded_at,
+       'caregiver' AS role
+FROM caregivers
+WHERE is_approved = 0
+
+    `,
+    `
+    SELECT home_id AS id,
+           name, contact_email AS email, contact_phone AS phone,
+           city, services,
+           'retirement_home' AS role
+    FROM retirement_homes
+    WHERE is_approved = 0
+    `
+  ];
+
   let pending = [];
 
   Promise.all(
@@ -73,6 +111,7 @@ exports.getPendingApprovals = (req, res) => {
       res.status(500).json({ msg: "Error fetching pending approvals", error });
     });
 };
+
 
 // ✅ Approve user (caregiver or retirement home)
 exports.approveUser = (req, res) => {
@@ -130,83 +169,94 @@ exports.rejectUser = (req, res) => {
   });
 };
 
-// 🧠 Analyze Caregiver CV with AI
-exports.checkCaregiverCV = async (req, res) => {
-  try {
-    // ✅ Ensure file uploaded
-    if (!req.file || req.file.mimetype !== "application/pdf") {
-      return res.status(400).json({ msg: "Please upload a caregiver CV in PDF format." });
-    }
+// POST /api/admin/check-cv/:id  (or whatever route you use)
+exports.checkCaregiverCV = (req, res) => {
+  const caregiverId = req.params.id;
 
-    // ✅ Read PDF file
-    const filePath = req.file.path;
-    const dataBuffer = fs.readFileSync(filePath);
+  db.query(
+    "SELECT cv_path FROM caregivers WHERE caregiver_id = ?",
+    [caregiverId],
+    async (err, rows) => {
+      try {
+        if (err) return res.status(500).json({ msg: "DB error", err });
+        if (!rows.length || !rows[0].cv_path) {
+          return res.status(404).json({ msg: "No CV uploaded for this caregiver." });
+        }
 
-    // 🧾 Parse PDF text
-    const pdfData = await pdf(dataBuffer);
-    const text = pdfData.text.trim();
+        const cvPath = resolveUploadPath(rows[0].cv_path);
+        if (!cvPath || !fs.existsSync(cvPath)) {
+          return res.status(404).json({ msg: "CV file missing on server." });
+        }
 
-    if (!text || text.length < 100) {
-      return res.status(400).json({ msg: "The CV is empty or unreadable. Please upload a valid PDF." });
-    }
+        const buffer = fs.readFileSync(cvPath);
+        const pdfData = await pdfParse(buffer);
+        const text = (pdfData.text || "").trim();
 
-    // 🧠 Send CV text to OpenAI
-    const prompt = `
-You are an HR AI assistant evaluating a caregiver's resume. 
-Based on the following CV text, rate how well this candidate fits a professional caregiver role for elderly people.
-Consider skills like nursing, first aid, elderly care, empathy, experience in retirement homes, and communication.
+        if (!text || text.length < 100) {
+          return res.status(400).json({ msg: "CV content is too short or unreadable." });
+        }
 
-Return ONLY a JSON object with:
+        const prompt = `
+You are an HR assistant.
+Evaluate this caregiver CV for elderly care.
+
+Return ONLY valid JSON:
 {
   "score": number (0-100),
-  "feedback": "string",
-  "approved": boolean (true if score > 70)
+  "feedback": "short explanation"
 }
 
-CV Text:
+CV:
 ${text}
 `;
 
-    const aiResponse = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.4,
-    });
+        let aiResp;
+        try {
+          aiResp = await analyzerOpenAI.chat.completions.create({
+            model: ANALYZER_MODEL,
+            messages: [{ role: "user", content: prompt }],
+            temperature: 0.3,
+          });
+        } catch (e) {
+          // Handle quota/billing problems without crashing the server
+          const status = e?.status || 500;
+          const code = e?.code || e?.error?.code;
 
-    const responseText = aiResponse.choices[0].message.content;
-    console.log("🧠 AI Evaluation:", responseText);
+          if (status === 429 || code === "insufficient_quota") {
+            return res.status(503).json({
+              msg: "Analyzer AI is not available (no API quota / billing).",
+              details: "Add billing to OPENAI_ANALYZER_API_KEY or use a key with credits.",
+            });
+          }
 
-    // ✅ Try to parse AI JSON output safely
-    let result;
-    try {
-      result = JSON.parse(responseText);
-    } catch (err) {
-      result = { score: 50, feedback: responseText, approved: false };
-    }
+          return res.status(500).json({ msg: "AI request failed", error: e?.message || String(e) });
+        }
 
-    // ✅ Update caregiver approval status + feedback in DB if approved
-    const caregiverId = req.params.id;
-    const feedback = result.feedback || "No feedback provided";
-    const score = result.score || 0;
-    const approved = result.approved ? 1 : 0;
+        let result;
+        try {
+          result = JSON.parse(aiResp.choices[0].message.content);
+        } catch {
+          result = { score: 50, feedback: "AI parsing failed." };
+        }
 
-    db.query(
-      "UPDATE caregivers SET is_approved = ?, ai_score = ?, ai_feedback = ? WHERE caregiver_id = ?",
-      [approved, score, feedback, caregiverId],
-      (err) => {
-        if (err) console.error("DB update error:", err);
+        db.query(
+          "UPDATE caregivers SET ai_score = ?, ai_feedback = ? WHERE caregiver_id = ?",
+          [result.score || 0, result.feedback || "", caregiverId],
+          () => {}
+        );
+
+        return res.status(200).json({
+          msg: "CV analyzed successfully",
+          ai_score: result.score,
+          ai_feedback: result.feedback,
+        });
+      } catch (e) {
+        return res.status(500).json({ msg: "Analyzer crashed", error: e?.message || String(e) });
       }
-    );
-
-    res.status(200).json({
-      msg: "CV analyzed successfully",
-      result,
-    });
-  } catch (error) {
-    console.error("Error analyzing PDF:", error);
-    res.status(500).json({ msg: "Failed to analyze CV", error: error.message });
-  }
+    }
+  );
 };
+
 
 // 🧩 View all matches for a family
 exports.getFamilyMatches = (req, res) => {
@@ -730,8 +780,10 @@ exports.getHealthAlerts = (req, res) => {
     res.status(200).json({ msg: "Health alerts retrieved", alerts: results });
   });
 };
+const { reverseGeocode } = require("../services/locationService");
+
 // 🧭 GPS: overview for all elders
-exports.getElderLocationOverview = (req, res) => {
+exports.getElderLocationOverview = async (req, res) => {
   const sql = `
     SELECT 
       e.elder_id,
@@ -745,12 +797,19 @@ exports.getElderLocationOverview = (req, res) => {
     ORDER BY last_seen DESC;
   `;
 
-  db.query(sql, (err, rows) => {
+  db.query(sql, async (err, rows) => {
     if (err) {
       console.error("Error fetching GPS overview:", err);
-      return res
-        .status(500)
-        .json({ msg: "Error fetching GPS overview", err });
+      return res.status(500).json({ msg: "Error fetching GPS overview", err });
+    }
+
+    // 🔁 Add place_name
+    for (const r of rows) {
+      if (r.latitude && r.longitude) {
+        r.place_name = await reverseGeocode(r.latitude, r.longitude);
+      } else {
+        r.place_name = null;
+      }
     }
 
     res.status(200).json({
@@ -759,7 +818,6 @@ exports.getElderLocationOverview = (req, res) => {
     });
   });
 };
-
 // 🕒 GPS: full location history for one elder
 exports.getElderLocationHistory = (req, res) => {
   const { elder_id } = req.params;
@@ -777,12 +835,19 @@ exports.getElderLocationHistory = (req, res) => {
     LIMIT 200;
   `;
 
-  db.query(sql, [elder_id], (err, rows) => {
+  db.query(sql, [elder_id], async (err, rows) => {
     if (err) {
       console.error("Error fetching GPS history:", err);
-      return res
-        .status(500)
-        .json({ msg: "Error fetching GPS history", err });
+      return res.status(500).json({ msg: "Error fetching GPS history", err });
+    }
+
+    // 🔁 Add place_name
+    for (const r of rows) {
+      if (r.latitude && r.longitude) {
+        r.place_name = await reverseGeocode(r.latitude, r.longitude);
+      } else {
+        r.place_name = null;
+      }
     }
 
     res.status(200).json({
@@ -1019,4 +1084,37 @@ exports.searchAllUsers = (req, res) => {
 
 
 
+
+exports.viewCaregiverCV = (req, res) => {
+  const caregiverId = req.params.id;
+
+  db.query(
+    "SELECT cv_path, cv_original_name FROM caregivers WHERE caregiver_id = ? LIMIT 1",
+    [caregiverId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ msg: "DB error", err });
+      if (!rows.length) return res.status(404).json({ msg: "Caregiver not found" });
+
+      const { cv_path, cv_original_name } = rows[0];
+      if (!cv_path) return res.status(404).json({ msg: "No CV uploaded for this caregiver yet." });
+
+      const absPath = resolveUploadPath(cv_path);
+
+      if (!absPath || !fs.existsSync(absPath)) {
+        console.error("❌ File not found at:", absPath);
+        return res.status(404).json({ msg: "CV file is missing on server." });
+      }
+
+      // 🛠️ Crucial headers for Flutter PDF viewers
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="${(cv_original_name || "cv.pdf").replace(/"/g, "")}"`
+      );
+
+      return res.sendFile(absPath);
+    }
+  );
+};
 

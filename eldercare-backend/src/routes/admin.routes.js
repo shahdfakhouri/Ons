@@ -41,14 +41,8 @@ router.get(
   adminController.getUserGrowthTimeline
 );
 
-// ✅ New AI-powered CV checker route
-router.post(
-  "/check-cv/:id",
-  verifyToken,
-  isAdmin,
-  upload.single("cv"),
-  adminController.checkCaregiverCV
-);
+
+
 
 
 router.get("/active-users", verifyToken, isAdmin, adminController.getActiveUsers);
@@ -73,6 +67,12 @@ router.get("/reports", verifyToken, isAdmin, adminController.getWeeklyReports);
 router.get("/reports/export", verifyToken, isAdmin, adminController.exportWeeklyReports);
 router.post("/reports/analyze/:report_id", verifyToken, isAdmin, adminController.analyzeWeeklyReport);
 
+
+router.post("/check-cv/:id", verifyToken, isAdmin, adminController.checkCaregiverCV);
+
+
+
+
 // 📊 Admin Analytics
 router.get("/analytics", verifyToken, isAdmin, adminController.getAdminAnalytics);
 
@@ -84,5 +84,10 @@ router.get("/gps/history/:elder_id", verifyToken, isAdmin, adminController.getEl
 
 // (distance is already in /api/tracker, you can also expose a shortcut for admin if you want)
 router.get("/gps/distance/:elder_id/:caregiver_id", verifyToken, isAdmin, trackerController.getDistanceToCaregiver);
+
+router.get("/caregivers/:id/cv", adminController.viewCaregiverCV);
+
+
+
 
 module.exports = router;

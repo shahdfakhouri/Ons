@@ -990,3 +990,31 @@ exports.markChatRead = (req, res) => {
     );
   });
 };
+
+// POST /api/caregiver/me/cv
+exports.uploadMyCV = (req, res) => {
+  const caregiverId = req.user.id;
+
+  if (!req.file) return res.status(400).json({ msg: "Please upload a CV file." });
+
+  const filename = req.file.filename;               // e.g. 1700-abc.pdf
+  const cvUrl = `/uploads/${filename}`;             // ✅ store this in DB
+  const original = req.file.originalname;
+
+  db.query(
+    `UPDATE caregivers
+     SET cv_path = ?, cv_original_name = ?, cv_uploaded_at = CURRENT_TIMESTAMP
+     WHERE caregiver_id = ?`,
+    [cvUrl, original, caregiverId],
+    (err, result) => {
+      if (err) return res.status(500).json({ msg: "DB error", err });
+      if (!result.affectedRows) return res.status(404).json({ msg: "Caregiver not found" });
+
+      res.status(200).json({
+        msg: "CV uploaded successfully ✅",
+        cv_path: cvUrl,
+        cv_original_name: original,
+      });
+    }
+  );
+};

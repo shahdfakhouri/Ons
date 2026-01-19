@@ -230,6 +230,23 @@
   }
 
 
+Future<Uint8List> getCaregiverCvBytes(String caregiverId) async {
+  final res = await _client.get(
+    _url('/caregivers/$caregiverId/cv'),
+    headers: _headers(),
+  );
+  _throwIfBad(res);
+  return res.bodyBytes;
+}
+
+Future<Map<String, dynamic>> analyzeCaregiverCv(String caregiverId) async {
+  final res = await _client.post(
+    _url('/check-cv/$caregiverId'),
+    headers: _headers(),
+  );
+  _throwIfBad(res);
+  return jsonDecode(res.body) as Map<String, dynamic>;
+}
 
 
 

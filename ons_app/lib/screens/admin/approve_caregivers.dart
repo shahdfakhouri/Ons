@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ons_app/screens/admin/admin_layout.dart';
+import 'package:ons_app/screens/admin/caregiver_cv_viewer_page.dart';
 import 'package:ons_app/services/admin_api.dart';
 
 class ApproveCaregiversPage extends StatefulWidget {
@@ -14,6 +15,9 @@ class _ApproveCaregiversPageState extends State<ApproveCaregiversPage> {
   bool _isLoading = true;
   String? _error;
   List<Map<String, dynamic>> _pendingCaregivers = [];
+
+  // ✅ track per-caregiver analyze loading
+  final Map<String, bool> _analyzing = {};
 
   @override
   void initState() {
@@ -30,7 +34,6 @@ class _ApproveCaregiversPageState extends State<ApproveCaregiversPage> {
     try {
       final pending = await _api.getApprovals();
 
-      // Filter for caregivers and map the results
       final caregivers = pending
           .where((u) => (u['role']?.toString() ?? '') == 'caregiver')
           .map((e) => Map<String, dynamic>.from(e as Map))
@@ -69,7 +72,45 @@ class _ApproveCaregiversPageState extends State<ApproveCaregiversPage> {
     );
   }
 
+  // ✅ Analyze CV => calls backend, updates caregiver map (ai_score/ai_feedback)
+  Future<void> _handleAnalyze(Map<String, dynamic> caregiver) async {
+    final id = caregiver['id']?.toString() ?? '';
+    if (id.isEmpty) return;
+
+    setState(() => _analyzing[id] = true);
+
+    try {
+      // Make sure you added this method in AdminApi:
+      // Future<Map<String,dynamic>> analyzeCaregiverCv(String caregiverId)
+      final result = await _api.analyzeCaregiverCv(id);
+
+      // backend returns: { ai_score: ..., ai_feedback: ... }
+      final score = result['ai_score'];
+      final feedback = result['ai_feedback'];
+
+      setState(() {
+        caregiver['ai_score'] = score;
+        caregiver['ai_feedback'] = feedback;
+        _analyzing.remove(id);
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('CV analyzed and saved ✅')),
+      );
+    } catch (e) {
+      setState(() => _analyzing.remove(id));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Analyze failed: $e')),
+      );
+    }
+  }
+
   Widget _buildActionButtons(Map<String, dynamic> caregiver) {
+    final id = caregiver['id']?.toString() ?? '';
+    final bool isAnalyzing = _analyzing[id] == true;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -82,6 +123,42 @@ class _ApproveCaregiversPageState extends State<ApproveCaregiversPage> {
           icon: const Icon(Icons.cancel, color: Colors.red),
           tooltip: 'Reject',
           onPressed: () => _handleReject(caregiver),
+        ),
+       IconButton(
+  icon: const Icon(Icons.picture_as_pdf, color: Colors.blue),
+  tooltip: 'View CV',
+  onPressed: () {
+    // 🛠️ FIX 3: Robust ID passing
+    final idString = caregiver['id']?.toString() ?? '';
+    if (idString.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error: Caregiver ID is missing')),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CaregiverCvViewerPage(
+          caregiverId: idString, // This matches the backend :id param
+          caregiverName: caregiver['name']?.toString() ?? 'Caregiver',
+        ),
+      ),
+    );
+  },
+),
+
+        // ✅ Analyze CV button
+        IconButton(
+          icon: isAnalyzing
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.auto_awesome, color: Colors.deepPurple),
+          tooltip: caregiver['ai_score'] == null ? 'Analyze CV' : 'Re-analyze CV',
+          onPressed: isAnalyzing ? null : () => _handleAnalyze(caregiver),
         ),
       ],
     );
@@ -168,17 +245,19 @@ class _ApproveCaregiversPageState extends State<ApproveCaregiversPage> {
                         final name = caregiver['name']?.toString() ?? 'Unknown';
                         final email = caregiver['email']?.toString() ?? '';
                         final phone = caregiver['phone']?.toString() ?? '';
-                        
-                        // 🛠️ Standardize type for badge logic
-                        final type = (caregiver['employment_type']?.toString() ?? 'internal').toLowerCase().trim();
+
+                        final type = (caregiver['employment_type']?.toString() ?? 'internal')
+                            .toLowerCase()
+                            .trim();
 
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 8),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           child: ListTile(
                             leading: CircleAvatar(
-                              // Role-based visual triage
-                              backgroundColor: type == 'freelance' ? Colors.blue.shade100 : Colors.purple.shade100,
+                              backgroundColor: type == 'freelance'
+                                  ? Colors.blue.shade100
+                                  : Colors.purple.shade100,
                               child: Icon(
                                 type == 'freelance' ? Icons.person : Icons.business,
                                 color: type == 'freelance' ? Colors.blue : Colors.purple,
@@ -199,13 +278,12 @@ class _ApproveCaregiversPageState extends State<ApproveCaregiversPage> {
                                   [
                                     if (email.isNotEmpty) 'Email: $email',
                                     if (phone.isNotEmpty) 'Phone: $phone',
-                                    // 🛠️ ID Line removed for professional look
                                   ].join('\n'),
                                   style: const TextStyle(fontSize: 12, height: 1.4),
                                 ),
                                 const SizedBox(height: 12),
-                                
-                                // 🤖 AI EVALUATION BOX
+
+                                // 🤖 AI EVALUATION BOX (shows if already analyzed)
                                 if (caregiver['ai_score'] != null)
                                   Container(
                                     padding: const EdgeInsets.all(10),
@@ -224,20 +302,20 @@ class _ApproveCaregiversPageState extends State<ApproveCaregiversPage> {
                                             Text(
                                               "AI SCORE: ${caregiver['ai_score']}%",
                                               style: const TextStyle(
-                                                fontSize: 11, 
-                                                fontWeight: FontWeight.bold, 
-                                                color: Colors.blue
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.blue,
                                               ),
                                             ),
                                           ],
                                         ),
                                         const SizedBox(height: 4),
                                         Text(
-                                          caregiver['ai_feedback'] ?? "Analyzing medical expertise...",
+                                          caregiver['ai_feedback'] ?? "",
                                           style: const TextStyle(
-                                            fontSize: 11, 
-                                            fontStyle: FontStyle.italic, 
-                                            color: Colors.blueGrey
+                                            fontSize: 11,
+                                            fontStyle: FontStyle.italic,
+                                            color: Colors.blueGrey,
                                           ),
                                         ),
                                       ],
