@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:ons_app/services/family_api.dart';
 import 'package:ons_app/services/transaction_api.dart';
+import 'package:ons_app/services/payment_api.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class FamilyPaymentsPage extends StatefulWidget {
   const FamilyPaymentsPage({super.key});
@@ -12,10 +14,10 @@ class FamilyPaymentsPage extends StatefulWidget {
 class _FamilyPaymentsPageState extends State<FamilyPaymentsPage> with TickerProviderStateMixin {
   final FamilyApi _familyApi = FamilyApi();
   final TransactionApi _txApi = TransactionApi();
+  final PaymentApi _payApi = PaymentApi();
 
   late final TabController _tabs;
 
-  // forms
   String _method = 'paypal';
 
   final _caregiverId = TextEditingController();
@@ -50,6 +52,70 @@ class _FamilyPaymentsPageState extends State<FamilyPaymentsPage> with TickerProv
 
   num? _parseAmount() => num.tryParse(_amount.text.trim());
 
+  int _asInt(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    return int.tryParse(v.toString()) ?? 0;
+  }
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.parse(url);
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok) throw Exception('Could not open PayPal checkout');
+  }
+
+  Future<bool> _confirmAfterPayment() async {
+    return (await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => AlertDialog(
+            title: const Text('Complete payment'),
+            content: const Text(
+              'After you finish the PayPal payment in the browser, come back here and press "I Paid".',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('I Paid'),
+              ),
+            ],
+          ),
+        )) ??
+        false;
+  }
+
+  // ✅ PAYPAL FLOW helper (for caregiver + medicine)
+  Future<void> _payWithPaypal({
+    required int paymentId,
+    required num amount,
+  }) async {
+    // 1) Create PayPal order
+    final orderRes = await _payApi.createPayPalOrder(paymentId: paymentId, amount: amount);
+    final approveUrl = (orderRes['approveUrl'] ?? '').toString();
+    final orderId = (orderRes['orderId'] ?? '').toString();
+
+    if (approveUrl.isEmpty || orderId.isEmpty) {
+      throw Exception('PayPal order failed: missing approveUrl/orderId');
+    }
+
+    // 2) Open PayPal checkout
+    await _openUrl(approveUrl);
+
+    // 3) User confirms after paying
+    final paid = await _confirmAfterPayment();
+    if (!paid) {
+      _snack('Payment cancelled', error: true);
+      return;
+    }
+
+    // 4) Capture
+    await _payApi.capturePayPal(orderId: orderId, paymentId: paymentId);
+  }
+
   Future<void> _payFreelancer() async {
     final caregiverId = int.tryParse(_caregiverId.text.trim());
     final amount = _parseAmount();
@@ -60,8 +126,21 @@ class _FamilyPaymentsPageState extends State<FamilyPaymentsPage> with TickerProv
 
     setState(() => _loadingPay = true);
     try {
-      await _txApi.payFreelancer(caregiverId: caregiverId, amount: amount, method: _method);
-      _snack('Payment completed ✅');
+      final txRes = await _txApi.payFreelancer(
+        caregiverId: caregiverId,
+        amount: amount,
+        method: _method,
+      );
+
+      if (_method == 'paypal') {
+        final paymentId = _asInt(txRes['paymentId'] ?? txRes['payment_id']);
+        if (paymentId == 0) throw Exception('Missing paymentId from backend');
+        await _payWithPaypal(paymentId: paymentId, amount: amount);
+        _snack('PayPal payment completed ✅');
+      } else {
+        _snack('Payment recorded ✅ (${_method})');
+      }
+
       _amount.clear();
       _caregiverId.clear();
       setState(() {}); // refresh history builders
@@ -81,10 +160,17 @@ class _FamilyPaymentsPageState extends State<FamilyPaymentsPage> with TickerProv
       return;
     }
 
+    // 🔒 Your backend should block paypal here (no caregiver_id stored for capture finalization)
+    if (_method == 'paypal') {
+      _snack('PayPal for home payments is not supported yet. Use on_arrival.', error: true);
+      return;
+    }
+
     setState(() => _loadingPay = true);
     try {
       await _txApi.payHome(homeId: homeId, caregiverId: caregiverId, amount: amount, method: _method);
-      _snack('Payment completed ✅');
+      _snack('Payment recorded ✅ (${_method})');
+
       _amount.clear();
       _homeId.clear();
       _caregiverId.clear();
@@ -106,8 +192,17 @@ class _FamilyPaymentsPageState extends State<FamilyPaymentsPage> with TickerProv
 
     setState(() => _loadingPay = true);
     try {
-      await _txApi.payMedicine(medicineId: medicineId, amount: amount, method: _method);
-      _snack('Payment completed ✅');
+      final txRes = await _txApi.payMedicine(medicineId: medicineId, amount: amount, method: _method);
+
+      if (_method == 'paypal') {
+        final paymentId = _asInt(txRes['paymentId'] ?? txRes['payment_id']);
+        if (paymentId == 0) throw Exception('Missing paymentId from backend');
+        await _payWithPaypal(paymentId: paymentId, amount: amount);
+        _snack('PayPal payment completed ✅');
+      } else {
+        _snack('Payment recorded ✅ (${_method})');
+      }
+
       _amount.clear();
       _medicineId.clear();
       setState(() {});
@@ -200,7 +295,9 @@ class _FamilyPaymentsPageState extends State<FamilyPaymentsPage> with TickerProv
             if (snap.connectionState != ConnectionState.done) {
               return const Card(child: Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator()));
             }
-            if (snap.hasError) return Card(child: Padding(padding: const EdgeInsets.all(16), child: Text('Error: ${snap.error}')));
+            if (snap.hasError) {
+              return Card(child: Padding(padding: const EdgeInsets.all(16), child: Text('Error: ${snap.error}')));
+            }
 
             final list = _extractList(snap.data, key: 'payments');
             if (list.isEmpty) {
@@ -238,7 +335,9 @@ class _FamilyPaymentsPageState extends State<FamilyPaymentsPage> with TickerProv
             if (snap.connectionState != ConnectionState.done) {
               return const Card(child: Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator()));
             }
-            if (snap.hasError) return Card(child: Padding(padding: const EdgeInsets.all(16), child: Text('Error: ${snap.error}')));
+            if (snap.hasError) {
+              return Card(child: Padding(padding: const EdgeInsets.all(16), child: Text('Error: ${snap.error}')));
+            }
 
             final list = _extractList(snap.data, key: 'transactions');
             if (list.isEmpty) {

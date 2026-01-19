@@ -38,25 +38,26 @@ class TransactionApi {
     return _decode(res);
   }
 
-  Future<void> payFreelancer({
+  // ✅ Now returns a response map (includes paymentId + status)
+  Future<Map<String, dynamic>> payFreelancer({
     required int caregiverId,
     required num amount,
     required String method,
   }) async {
-    await post('/pay-freelancer', body: {
+    return await post('/pay-freelancer', body: {
       'caregiver_id': caregiverId,
       'amount': amount,
       'method': method,
     });
   }
 
-  Future<void> payHome({
+  Future<Map<String, dynamic>> payHome({
     required int homeId,
     required int caregiverId,
     required num amount,
     required String method,
   }) async {
-    await post('/pay-home', body: {
+    return await post('/pay-home', body: {
       'home_id': homeId,
       'caregiver_id': caregiverId,
       'amount': amount,
@@ -64,12 +65,12 @@ class TransactionApi {
     });
   }
 
-  Future<void> payMedicine({
+  Future<Map<String, dynamic>> payMedicine({
     required int medicineId,
     required num amount,
     required String method,
   }) async {
-    await post('/pay-medicine', body: {
+    return await post('/pay-medicine', body: {
       'medicine_id': medicineId,
       'amount': amount,
       'method': method,

@@ -81,31 +81,20 @@
   // Inside admin_api.dart
 
   Future<List<Map<String, dynamic>>> getHealthSummary() async {
-    try {
-      // 1. We use your existing _client and _url helper instead of _dio
-      final res = await _client.get(_url('/health-summary'), headers: _headers());
-      
-      // 2. Reuse your class's existing error handler
-      _throwIfBad(res);
-      
-      // 3. Decode the body
-      final dynamic decoded = jsonDecode(res.body);
-      
-      // 4. Handle the List response to stop the "Map vs List" error
-      if (decoded is List) {
-        return List<Map<String, dynamic>>.from(decoded);
-      } 
-      
-      // Fallback if your backend wraps it in an object
-      if (decoded is Map && decoded['summaries'] != null) {
-        return List<Map<String, dynamic>>.from(decoded['summaries']);
-      }
+  final res = await _client.get(_url('/health-summary'), headers: _headers());
+  _throwIfBad(res);
 
-      return [];
-    } catch (e) {
-      throw Exception('Failed to load health summary: $e');
-    }
+  final decoded = jsonDecode(res.body);
+
+  if (decoded is List) {
+    return decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
   }
+  if (decoded is Map && decoded['summaries'] is List) {
+    final list = decoded['summaries'] as List;
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+  return [];
+}
 
     Future<List> getMatches(String familyId) async {
       final j = await get('/matches/$familyId');

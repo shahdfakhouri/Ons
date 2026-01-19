@@ -35,15 +35,47 @@ class PaymentApi {
     return _decode(res);
   }
 
+  Future<Map<String, dynamic>> post(String path, {Object? body}) async {
+    final res = await _client.post(
+      _url(path),
+      headers: _headers(),
+      body: jsonEncode(body ?? {}),
+    );
+    return _decode(res);
+  }
+
+  // Existing (receiver endpoints)
   Future<Map<String, dynamic>> getReceiverRevenue() async {
-    // GET /api/payments/receiver-revenue
     return await get('/receiver-revenue');
   }
 
   Future<List<Map<String, dynamic>>> getReceiverTransactions({int limit = 50}) async {
-    // GET /api/payments/receiver-transactions?limit=50
     final j = await get('/receiver-transactions', query: {'limit': '$limit'});
     final list = (j['transactions'] as List?) ?? [];
     return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  // ✅ NEW: PayPal create order (returns approveUrl + orderId)
+  Future<Map<String, dynamic>> createPayPalOrder({
+    required int paymentId,
+    required num amount,
+  }) async {
+    // POST /api/payments/create
+    return await post('/create', body: {
+      'paymentId': paymentId,
+      'amount': amount,
+    });
+  }
+
+  // ✅ NEW: PayPal capture order (finalizes DB payment + inserts transactions)
+  Future<Map<String, dynamic>> capturePayPal({
+    required String orderId,
+    required int paymentId,
+  }) async {
+    // GET /api/payments/capture?orderId=...&paymentId=...
+    return await get('/capture', query: {
+      'orderId': orderId,
+      'paymentId': paymentId.toString(),
+    });
   }
 }
