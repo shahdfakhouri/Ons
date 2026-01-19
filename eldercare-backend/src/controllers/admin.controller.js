@@ -45,7 +45,8 @@ exports.getAllUsers = async (req, res) => {
 // ✅ Get pending approvals (caregivers + retirement homes)
 exports.getPendingApprovals = (req, res) => {
   const queries = [
-    "SELECT caregiver_id AS id, name, email, phone, 'caregiver' AS role FROM caregivers WHERE is_approved = 0",
+    // 🛠️ Added employment_type, ai_score, and ai_feedback to the SELECT list
+    "SELECT caregiver_id AS id, name, email, phone, employment_type, ai_score, ai_feedback, 'caregiver' AS role FROM caregivers WHERE is_approved = 0",
     "SELECT home_id AS id, name, contact_email AS email, contact_phone AS phone, 'retirement_home' AS role FROM retirement_homes WHERE is_approved = 0"
   ];
 
@@ -319,20 +320,35 @@ exports.getElderAssignments = (req, res) => {
 };
 
 //🕒 Last check-in & health summary
+// src/controllers/admin.controller.js
+// src/controllers/admin.controller.js
+
+// src/controllers/admin.controller.js
+
+// src/controllers/admin.controller.js
+
 exports.getElderHealthSummary = (req, res) => {
   const sql = `
-    SELECT e.elder_id, e.name AS elder_name,
-           MAX(ch.checkin_time) AS last_checkin,
-           hl.blood_pressure, hl.blood_sugar, hl.temperature, hl.notes, hl.date
+    SELECT 
+      e.elder_id, 
+      e.name AS elder_name,
+      -- Use the column you showed in your screenshot!
+      e.last_check_in AS last_checkin, 
+      hl.blood_pressure, 
+      hl.blood_sugar, 
+      hl.temperature, 
+      hl.notes, 
+      hl.date
     FROM elders e
-    LEFT JOIN checkins ch ON e.elder_id = ch.elder_id
-    LEFT JOIN health_logs hl ON e.elder_id = hl.elder_id
-    GROUP BY e.elder_id
-    ORDER BY e.elder_id;
+    -- JOIN with health_logs to get the most recent vitals
+    LEFT JOIN health_logs hl ON hl.elder_id = e.elder_id 
+      AND hl.log_id = (SELECT MAX(log_id) FROM health_logs WHERE elder_id = e.elder_id)
+    ORDER BY e.name ASC;
   `;
+
   db.query(sql, (err, results) => {
-    if (err) return res.status(500).json({ msg: "Error fetching health summaries", err });
-    res.status(200).json({ msg: "Elder health summaries", summaries: results });
+    if (err) return res.status(500).json({ msg: "Error fetching summaries", err });
+    res.status(200).json(results);
   });
 };
 
@@ -970,3 +986,18 @@ exports.getUserGrowthTimeline = (req, res) => {
     });
   });
 };
+
+
+exports.searchAllUsers = (req, res) => {
+  const query = req.query.name || '';
+  const sql = `SELECT * FROM master_user_list WHERE name LIKE ? LIMIT 20`;
+  
+  db.query(sql, [`%${query}%`], (err, results) => {
+    if (err) return res.status(500).json({ msg: "Search failed", err });
+    res.status(200).json(results);
+  });
+};
+
+
+
+

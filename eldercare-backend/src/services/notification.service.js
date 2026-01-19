@@ -2,10 +2,8 @@ const nodemailer = require("nodemailer");
 const twilio = require("twilio");
 const db = require("../config/db");
 
-// ✅ Twilio setup
 const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
-// ✅ Gmail setup
 const transporter = nodemailer.createTransport({
   service: "Gmail",
   auth: {
@@ -14,7 +12,6 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// ✉️ Send email
 async function sendEmail(to, subject, text) {
   try {
     await transporter.sendMail({
@@ -29,7 +26,6 @@ async function sendEmail(to, subject, text) {
   }
 }
 
-// 📱 Send SMS
 async function sendSMS(to, text) {
   try {
     await client.messages.create({
@@ -43,23 +39,39 @@ async function sendSMS(to, text) {
   }
 }
 
-// 💾 Store notification in DB
-function createNotification(type, message, userId = null, severity = "info") {
+
+// 💾 Store notification in DB with logic to prevent "Admin Spam"
+function createNotification({ type, message, userId = null, elder_id = null, sender_id = null, sender_role = 'system', severity = "info" }) {
+  // 🚀 Logic: Define which types actually need to go to the Admin Dashboard
+  const adminTypes = ['emergency', 'health_alert', 'payment', 'new_user', 'report'];
+  
+  if (!adminTypes.includes(type)) {
+    console.log(`ℹ️ Internal notification [${type}] skipped for Admin Dashboard.`);
+    return; // Don't clutter the admin table with routine reminders
+  }
+
   const sql = `
-    INSERT INTO admin_notifications (type, message, user_id, severity, status)
-    VALUES (?, ?, ?, ?, 'open')
+    INSERT INTO admin_notifications 
+    (type, message, user_id, elder_id, sender_id, sender_role, severity, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'open')
   `;
-  db.query(sql, [type, message, userId, severity], (err) => {
+
+  db.query(sql, [type, message, userId, elder_id, sender_id, sender_role, severity], (err) => {
     if (err) console.error("❌ Error saving notification:", err);
-    else console.log(`💾 Notification saved: [${severity}] ${type} → ${message}`);
+    else console.log(`💾 Organized: [${severity}] ${type} sent to Admin Triage.`);
   });
 }
+
 // 🧠 Unified notification
-async function notify({ type, message, email, phone, userId, severity = "info" }) {
-  createNotification(type, message, userId, severity);
+async function notify(data) {
+  const { type, email, phone, message } = data;
+
+  // 🚀 Step 1: Route to the appropriate Admin Tab based on type
+  createNotification(data);
+
+  // Step 2: External Alerts
   if (email) await sendEmail(email, `ElderCare: ${type}`, message);
   if (phone) await sendSMS(phone, message);
 }
 
 module.exports = { notify, sendEmail, sendSMS };
-

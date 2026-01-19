@@ -28,6 +28,10 @@ static String get retirementReportsBase => '$baseUrl/api/retirement/reports';
 
 
   static String get retirementNotesBase => '$baseUrl/api/retirement/notes';
+static String get paymentsBase => '$baseUrl/api/payments';
+static String get transactionsBase => '$baseUrl/api/transactions'; // optional but useful
+
+
 
   
 }

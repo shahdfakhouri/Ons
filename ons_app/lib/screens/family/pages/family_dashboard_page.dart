@@ -47,14 +47,39 @@ class _FamilyDashboardPageState extends State<FamilyDashboardPage> {
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
-                children: [
-                  ActionChip(avatar: const Icon(Icons.groups, size: 18), label: const Text('Elders'), onPressed: () => widget.onNavigate(1)),
-                  ActionChip(avatar: const Icon(Icons.auto_awesome, size: 18), label: const Text('Match'), onPressed: () => widget.onNavigate(2)),
-                  ActionChip(avatar: const Icon(Icons.warning_amber, size: 18), label: const Text('Alerts'), onPressed: () => widget.onNavigate(3)),
-                  ActionChip(avatar: const Icon(Icons.calendar_month, size: 18), label: const Text('Calendar'), onPressed: () => widget.onNavigate(4)),
-                  ActionChip(avatar: const Icon(Icons.call, size: 18), label: const Text('Calls'), onPressed: () => widget.onNavigate(5)),
-                  ActionChip(avatar: const Icon(Icons.person, size: 18), label: const Text('Profile'), onPressed: () => widget.onNavigate(6)),
-                ],
+               children: [
+  ActionChip(
+    avatar: const Icon(Icons.groups, size: 18),
+    label: const Text('Elders'),
+    onPressed: () => widget.onNavigate(2),
+  ),
+  ActionChip(
+    avatar: const Icon(Icons.auto_awesome, size: 18),
+    label: const Text('Match'),
+    onPressed: () => widget.onNavigate(3),
+  ),
+  ActionChip(
+    avatar: const Icon(Icons.warning_amber, size: 18),
+    label: const Text('Alerts'),
+    onPressed: () => widget.onNavigate(4),
+  ),
+  ActionChip(
+    avatar: const Icon(Icons.calendar_month, size: 18),
+    label: const Text('Calendar'),
+    onPressed: () => widget.onNavigate(5),
+  ),
+  ActionChip(
+    avatar: const Icon(Icons.call, size: 18),
+    label: const Text('Calls'),
+    onPressed: () => widget.onNavigate(6),
+  ),
+  ActionChip(
+    avatar: const Icon(Icons.person, size: 18),
+    label: const Text('Profile'),
+    onPressed: () => widget.onNavigate(7),
+  ),
+],
+
               ),
             ],
           );

@@ -1,3 +1,4 @@
+import 'package:intl/intl.dart'; // Add this line
 import 'package:flutter/material.dart';
 import 'package:ons_app/screens/admin/admin_layout.dart';
 import 'package:ons_app/services/admin_api.dart';
@@ -115,36 +116,46 @@ class _HealthLogsPageState extends State<HealthLogsPage> {
                     Expanded(
                       child: _rows.isEmpty
                           ? const Center(child: Text('No health summaries found.'))
-                          : ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: _rows.length,
-                              itemBuilder: (context, index) {
-                                final row = _rows[index] as Map;
+                          :ListView.builder(
+  padding: const EdgeInsets.all(16),
+  itemCount: _rows.length,
+  itemBuilder: (context, index) {
+  final row = _rows[index] as Map;
 
-                                final elderName = _v(row['elder_name']);
-                                final lastCheckin = _v(row['last_checkin']);
-                                final date = _v(row['date']);
-                                final bp = _v(row['blood_pressure']);
-                                final sugar = _v(row['blood_sugar']);
-                                final temp = _v(row['temperature']);
-                                final notes = _v(row['notes'], fallback: '');
+  // Local helper to handle the raw timestamp
+  String formatTime(dynamic raw) {
+    if (raw == null || raw == 'null' || raw == '') return 'Never';
+    try {
+      final dt = DateTime.parse(raw.toString());
+      return DateFormat('MMM dd, HH:mm').format(dt); 
+    } catch (_) {
+      return raw.toString();
+    }
+  }
 
-                                final risk = _riskLabel(row);
-                                final riskColor = _riskColor(risk);
+  final elderName = _v(row['elder_name']);
+  
+  // This matches the "AS last_checkin" in your SQL above
+  final lastCheckin = formatTime(row['last_checkin']);
+  
+  // Format the date of the vitals entry as well
+  final date = formatTime(row['date']);
 
-                                return _HealthSummaryCard(
-                                  elderName: elderName,
-                                  lastCheckin: lastCheckin,
-                                  date: date,
-                                  bp: bp,
-                                  sugar: sugar,
-                                  temp: temp,
-                                  notes: notes,
-                                  risk: risk,
-                                  riskColor: riskColor,
-                                );
-                              },
-                            ),
+  // ... rest of your variables (bp, sugar, temp, etc.) ...
+
+  return _HealthSummaryCard(
+    elderName: elderName,
+    lastCheckin: lastCheckin, // This will now show "Jan 15, 22:17"
+    date: date,
+    bp: _v(row['blood_pressure']),
+    sugar: _v(row['blood_sugar']),
+    temp: _v(row['temperature']),
+    notes: _v(row['notes'], fallback: ''),
+    risk: _riskLabel(row),
+    riskColor: _riskColor(_riskLabel(row)),
+  );
+},
+),
                     ),
                   ],
                 ),

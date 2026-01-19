@@ -1,4 +1,6 @@
 require("dotenv").config();
+console.log("✅ BOOTED: MAIN SERVER FILE (elder routes mounted)");
+
 const express = require("express");
 const cors = require("cors");
 const db = require("./src/config/db");

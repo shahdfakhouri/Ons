@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'package:ons_app/services/auth_service.dart';
+import 'package:ons_app/screens/auth/login_page.dart';
+
 import 'pages/family_dashboard_page.dart';
 import 'pages/family_profile_page.dart';
 import 'pages/elders/elders_list_page.dart';
@@ -8,8 +11,8 @@ import 'pages/alerts/alerts_page.dart';
 import 'pages/calendar/calendar_page.dart';
 import 'pages/calls/calls_page.dart';
 
-// ✅ add this
 import 'pages/notifications/notifications_page.dart';
+import 'pages/payments/family_payments_page.dart';
 
 class FamilyLayout extends StatefulWidget {
   const FamilyLayout({super.key});
@@ -23,15 +26,24 @@ class _FamilyLayoutState extends State<FamilyLayout> {
 
   void _goTo(int i) => setState(() => _index = i);
 
+  void _logout(BuildContext context) {
+    AuthService().logout();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => false,
+    );
+  }
+
   late final List<Widget> _pages = [
     FamilyDashboardPage(onNavigate: _goTo),
-    const FamilyNotificationsPage(), // ✅ NEW
+    const FamilyNotificationsPage(),
     const EldersListPage(),
     const MatchPage(),
     const AlertsPage(),
     const CalendarPage(),
     const CallsPage(),
-    const FamilyProfilePage(),
+    const FamilyPaymentsPage(), // ✅ index 7
+    const FamilyProfilePage(),  // ✅ index 8
   ];
 
   @override
@@ -39,8 +51,21 @@ class _FamilyLayoutState extends State<FamilyLayout> {
     final width = MediaQuery.sizeOf(context).width;
     final isWide = width >= 900;
 
+    AppBar topBar() => AppBar(
+          title: const Text('Family'),
+          actions: [
+            TextButton.icon(
+              onPressed: () => _logout(context),
+              icon: const Icon(Icons.logout, size: 18),
+              label: const Text('Logout'),
+            ),
+            const SizedBox(width: 8),
+          ],
+        );
+
     if (!isWide) {
       return Scaffold(
+        appBar: topBar(),
         body: IndexedStack(index: _index, children: _pages),
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _index,
@@ -48,12 +73,13 @@ class _FamilyLayoutState extends State<FamilyLayout> {
           type: BottomNavigationBarType.fixed,
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Dash'),
-            BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'Inbox'), // ✅ NEW
+            BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'Inbox'),
             BottomNavigationBarItem(icon: Icon(Icons.groups), label: 'Elders'),
             BottomNavigationBarItem(icon: Icon(Icons.auto_awesome), label: 'Match'),
             BottomNavigationBarItem(icon: Icon(Icons.warning_amber), label: 'Alerts'),
             BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Calendar'),
             BottomNavigationBarItem(icon: Icon(Icons.call), label: 'Calls'),
+            BottomNavigationBarItem(icon: Icon(Icons.payments_outlined), label: 'Payments'), // ✅ NEW
             BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
@@ -61,6 +87,7 @@ class _FamilyLayoutState extends State<FamilyLayout> {
     }
 
     return Scaffold(
+      appBar: topBar(),
       body: Row(
         children: [
           NavigationRail(
@@ -74,7 +101,7 @@ class _FamilyLayoutState extends State<FamilyLayout> {
                 selectedIcon: Icon(Icons.home),
                 label: Text('Dash'),
               ),
-              NavigationRailDestination( // ✅ NEW
+              NavigationRailDestination(
                 icon: Icon(Icons.notifications_outlined),
                 selectedIcon: Icon(Icons.notifications),
                 label: Text('Inbox'),
@@ -103,6 +130,11 @@ class _FamilyLayoutState extends State<FamilyLayout> {
                 icon: Icon(Icons.call_outlined),
                 selectedIcon: Icon(Icons.call),
                 label: Text('Calls'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.payments_outlined),
+                selectedIcon: Icon(Icons.payments),
+                label: Text('Payments'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.person_outline),

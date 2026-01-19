@@ -18,7 +18,6 @@ function haversineKm(lat1, lon1, lat2, lon2) {
 /**
  * POST /api/emergency
  * Triggered by elder/family/caregiver/admin/system
- * Creates emergency request + notifies closest retirement homes (top N)
  */
 exports.createEmergency = (req, res) => {
   const role = req.user?.role || "system";
@@ -33,7 +32,7 @@ exports.createEmergency = (req, res) => {
     longitude,
     address_text,
     notes,
-    notify_top = 3, // how many homes to notify
+    notify_top = 3,
   } = req.body || {};
 
   if (latitude === undefined || longitude === undefined) {
@@ -42,9 +41,6 @@ exports.createEmergency = (req, res) => {
 
   const lat = Number(latitude);
   const lng = Number(longitude);
-  if (Number.isNaN(lat) || Number.isNaN(lng)) {
-    return res.status(400).json({ msg: "latitude/longitude must be numbers" });
-  }
 
   const insertSql = `
     INSERT INTO emergency_requests
@@ -67,30 +63,33 @@ exports.createEmergency = (req, res) => {
       address_text || null,
       notes || null,
     ],
-    (err, result) => {
+    async (err, result) => {
       if (err) return res.status(500).json({ msg: "Error creating emergency", err });
 
       const emergencyId = result.insertId;
 
-      // Get all approved retirement homes with coordinates
+      // ✅ 1. Notify the Admin Dashboard (Linked to Fatima Nasser/Lina Kareem)
+      await notify({
+        type: "emergency",
+        message: `🚨 SOS: ${emergency_type || "Emergency"}! Location: (${lat}, ${lng})`,
+        elder_id: elder_id || null,      // Name Resolution
+        sender_id: triggeredById,        // Reporter Resolution
+        sender_role: role,
+        severity: severity || "critical", // Red UI Border
+      });
+
+      // 2. Notify Retirement Homes
       const homesSql = `
-        SELECT home_id, name, city, contact_email, contact_phone, latitude, longitude
+        SELECT home_id, name, contact_email, contact_phone, latitude, longitude
         FROM retirement_homes
-        WHERE is_approved = 1
-          AND latitude IS NOT NULL
-          AND longitude IS NOT NULL
+        WHERE is_approved = 1 AND latitude IS NOT NULL AND longitude IS NOT NULL
       `;
 
       db.query(homesSql, async (err2, homes) => {
-        if (err2) return res.status(500).json({ msg: "Error fetching homes", err: err2 });
-        if (!homes.length) {
-          return res.status(201).json({
-            msg: "Emergency created ✅ but no approved homes with coordinates found",
-            emergency_id: emergencyId,
-          });
+        if (err2 || !homes.length) {
+          return res.status(201).json({ msg: "Emergency created ✅", emergency_id: emergencyId });
         }
 
-        // Compute distances and pick closest N
         const ranked = homes
           .map((h) => ({
             ...h,
@@ -99,51 +98,63 @@ exports.createEmergency = (req, res) => {
           .sort((a, b) => a.distance_km - b.distance_km)
           .slice(0, Math.max(1, Math.min(Number(notify_top) || 3, 10)));
 
-        // Insert notification rows
-        const notifInsertSql = `
-          INSERT INTO emergency_notifications (emergency_id, home_id, distance_km)
-          VALUES ?
-        `;
         const values = ranked.map((h) => [emergencyId, h.home_id, h.distance_km.toFixed(2)]);
 
-        db.query(notifInsertSql, [values], async (err3) => {
-          if (err3) console.error("Error inserting emergency_notifications:", err3);
-
-          // Send actual notifications (email/SMS) using your notify()
-          for (const h of ranked) {
-            const msg = `🚨 URGENT Emergency nearby!\nEmergency ID: ${emergencyId}\nType: ${
-              emergency_type || "breakdown"
-            }\nLocation: (${lat}, ${lng})\nDistance: ${h.distance_km.toFixed(
-              2
-            )} km\n${address_text ? "Address: " + address_text + "\n" : ""}${
-              notes ? "Notes: " + notes : ""
-            }`;
-
-            await notify({
-              type: "emergency",
-              message: msg,
-              userId: elder_id || null,
-              severity: severity || "critical",
-              email: h.contact_email || null,
-              phone: h.contact_phone ? String(h.contact_phone) : null,
-            });
+        db.query(
+          "INSERT INTO emergency_notifications (emergency_id, home_id, distance_km) VALUES ?",
+          [values],
+          async (err3) => {
+            for (const h of ranked) {
+              await notify({
+                type: "emergency",
+                message: `🚨 URGENT Emergency nearby!\nType: ${emergency_type || "breakdown"}\nDistance: ${h.distance_km.toFixed(2)} km`,
+                userId: elder_id || null,
+                severity: severity || "critical",
+                email: h.contact_email || null,
+                phone: h.contact_phone ? String(h.contact_phone) : null,
+              });
+            }
+            res.status(201).json({ msg: "Emergency created ✅", emergency_id: emergencyId, notified_count: ranked.length });
           }
-
-          return res.status(201).json({
-            msg: "Emergency created ✅ closest retirement homes notified",
-            emergency_id: emergencyId,
-            notified_homes: ranked.map((h) => ({
-              home_id: h.home_id,
-              name: h.name,
-              distance_km: Number(h.distance_km.toFixed(2)),
-            })),
-          });
-        });
+        );
       });
     }
   );
 };
 
+// --- ELDER CONTROLLER METHODS ---
+
+exports.elderPanic = (req, res) => {
+  const elder_id = req.user.elder_id;
+  const { latitude, longitude, address_text, description } = req.body;
+
+  db.query(
+    `INSERT INTO emergency_requests
+     (elder_id, triggered_by_role, triggered_by_id, emergency_type, severity,
+      latitude, longitude, address_text, description, status)
+     VALUES (?, 'elder', ?, 'panic', 'critical', ?, ?, ?, ?, 'open')`,
+    [elder_id, elder_id, latitude ?? 0, longitude ?? 0, address_text || null, description || "Elder pressed panic button"],
+    async (err, result) => {
+      if (err) return res.status(500).json({ msg: "DB error", details: err.message });
+
+      const emergencyId = result.insertId;
+
+      // ✅ 2. Notify Admin Dashboard for Elder Panic
+      await notify({
+        type: "emergency",
+        message: `🚨 PANIC BUTTON: Elder requested immediate help!`,
+        elder_id: elder_id,
+        sender_id: elder_id,
+        sender_role: 'elder',
+        severity: "critical",
+      });
+
+      res.status(201).json({ msg: "Emergency created", emergency_id: emergencyId });
+    }
+  );
+};
+
+// --- (Keep getHomeEmergencies, acceptEmergency, rejectEmergency, getMyEmergencies, cancelMyEmergency as they were) ---
 /**
  * GET /api/retirement/emergencies?status=open|assigned|all
  * Retirement home views emergencies that notified them

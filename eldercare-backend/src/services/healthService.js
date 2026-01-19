@@ -11,18 +11,11 @@ function parseBloodPressure(bpStr) {
 
 function parseNumber(value) {
   if (value === undefined || value === null || value === "") return null;
-
-  // If already a number, just return it (unless NaN)
-  if (typeof value === "number") {
-    return Number.isNaN(value) ? null : value;
-  }
-
-  // Otherwise convert to string safely
+  if (typeof value === "number") return Number.isNaN(value) ? null : value;
   const str = String(value);
   const match = str.match(/(\d+(\.\d+)?)/);
   return match ? Number(match[1]) : null;
 }
-
 
 exports.saveHealthLogAndAlert = async (log) => {
   return new Promise((resolve, reject) => {
@@ -33,7 +26,7 @@ exports.saveHealthLogAndAlert = async (log) => {
       blood_sugar,
       temperature,
       notes,
-      heart_rate, // optional, if you include it
+      heart_rate,
     } = log;
 
     const sql = `
@@ -50,109 +43,68 @@ exports.saveHealthLogAndAlert = async (log) => {
           return reject(err);
         }
 
-        // ---- SMART ALERT RULES ----
         const alerts = [];
 
-        // 1) Blood pressure rules
+        // 1) Blood pressure rules - Removed "elder ${elder_id}"
         const bp = parseBloodPressure(blood_pressure);
         if (bp) {
           if (bp.systolic >= 180 || bp.diastolic >= 120) {
-            alerts.push({
-              severity: "critical",
-              msg: `Dangerously high blood pressure for elder ${elder_id}: ${bp.systolic}/${bp.diastolic}. Possible hypertensive crisis.`,
+            alerts.push({ 
+              severity: "critical", 
+              msg: `Dangerously high blood pressure detected: ${bp.systolic}/${bp.diastolic}. Possible hypertensive crisis.` 
             });
           } else if (bp.systolic >= 160 || bp.diastolic >= 100) {
-            alerts.push({
-              severity: "warning",
-              msg: `High blood pressure for elder ${elder_id}: ${bp.systolic}/${bp.diastolic}.`,
+            alerts.push({ 
+              severity: "warning", 
+              msg: `High blood pressure detected: ${bp.systolic}/${bp.diastolic}.` 
             });
           }
         }
 
-        // 2) Blood sugar rules
+        // 2) Blood sugar rules - Removed "elder ${elder_id}"
         const sugar = parseNumber(blood_sugar);
         if (sugar !== null) {
           if (sugar >= 300) {
-            alerts.push({
-              severity: "critical",
-              msg: `Very high blood sugar for elder ${elder_id}: ${sugar} mg/dL.`,
+            alerts.push({ 
+              severity: "critical", 
+              msg: `Very high blood sugar detected: ${sugar} mg/dL.` 
             });
           } else if (sugar >= 250 || sugar <= 70) {
-            alerts.push({
-              severity: "warning",
-              msg: `Abnormal blood sugar for elder ${elder_id}: ${sugar} mg/dL.`,
+            alerts.push({ 
+              severity: "warning", 
+              msg: `Abnormal blood sugar detected: ${sugar} mg/dL.` 
             });
           }
         }
 
-        // 3) Temperature rules
+        // 3) Temperature rules - Removed "elder ${elder_id}"
         const temp = parseNumber(temperature);
         if (temp !== null) {
           if (temp >= 39.0) {
-            alerts.push({
-              severity: "critical",
-              msg: `High fever for elder ${elder_id}: ${temp}°C.`,
+            alerts.push({ 
+              severity: "critical", 
+              msg: `High fever detected: ${temp}°C.` 
             });
           } else if (temp >= 38.0) {
-            alerts.push({
-              severity: "warning",
-              msg: `Fever for elder ${elder_id}: ${temp}°C.`,
-            });
-          } else if (temp <= 35.0) {
-            alerts.push({
-              severity: "warning",
-              msg: `Low body temperature for elder ${elder_id}: ${temp}°C.`,
+            alerts.push({ 
+              severity: "warning", 
+              msg: `Fever detected: ${temp}°C.` 
             });
           }
         }
 
-        // 4) Heart rate (from manual log or Apple data later)
-        const hr = heart_rate ? Number(heart_rate) : null;
-        if (hr) {
-          if (hr >= 130 || hr <= 40) {
-            alerts.push({
-              severity: "critical",
-              msg: `Abnormal heart rate for elder ${elder_id}: ${hr} bpm.`,
-            });
-          } else if (hr >= 110) {
-            alerts.push({
-              severity: "warning",
-              msg: `Elevated heart rate for elder ${elder_id}: ${hr} bpm.`,
-            });
-          }
-        }
-
-        // 5) Notes keywords (chest pain, dizziness, etc.)
-        const text = (notes || "").toLowerCase();
-        if (
-          text.includes("chest pain") ||
-          text.includes("shortness of breath") ||
-          text.includes("difficulty breathing")
-        ) {
-          alerts.push({
-            severity: "critical",
-            msg: `Elder ${elder_id} reported possible cardiac symptoms: "${notes}".`,
-          });
-        } else if (
-          text.includes("dizzy") ||
-          text.includes("fall") ||
-          text.includes("fell")
-        ) {
-          alerts.push({
-            severity: "warning",
-            msg: `Elder ${elder_id} reported fall / dizziness: "${notes}".`,
-          });
-        }
-
-        // send notifications for all alerts
+        // 4) Unified Notification Loop
         for (const alert of alerts) {
           await notify({
             type: "health_alert",
             message: alert.msg,
             email: process.env.TEST_EMAIL,
             phone: process.env.TEST_PHONE,
-            userId: elder_id,
+            elder_id: elder_id,      // Still pass the ID for relational DB linking
+            sender_id: caregiver_id, // Still pass the ID for relational DB linking
+            sender_role: 'caregiver',
             severity: alert.severity,
+            userId: null 
           });
         }
 

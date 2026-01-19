@@ -1,18 +1,75 @@
 const db = require("../config/db");
 const { notify } = require("../services/notification.service");
 
-// 🔔 Get all admin notifications
+
+
+// src/controllers/notifications.controller.js
+
+// src/controllers/notifications.controller.js
+
+// src/controllers/notifications.controller.js
+
 exports.getAdminNotifications = (req, res) => {
-  const sql = `
-    SELECT id, type, message, is_read, created_at 
-    FROM admin_notifications
-    ORDER BY created_at DESC;
+  const { status, severity, elder_id, role, startDate, endDate } = req.query;
+
+  let sql = `
+    SELECT an.*, e.name AS elder_name, c.name AS sender_name
+    FROM admin_notifications an
+    LEFT JOIN elders e ON an.elder_id = e.elder_id
+    LEFT JOIN caregivers c ON an.sender_id = c.caregiver_id
+    WHERE an.type != 'health_alert'  -- 🚀 FIX: Prevent medical alerts from duplicating in this list
   `;
-  db.query(sql, (err, results) => {
+
+  const params = [];
+
+  if (status && status !== 'all') { sql += " AND an.status = ?"; params.push(status); }
+  if (severity && severity !== 'all') { sql += " AND an.severity = ?"; params.push(severity); }
+  if (elder_id) { sql += " AND an.elder_id = ?"; params.push(elder_id); }
+  if (role && role !== 'all') { sql += " AND an.sender_role = ?"; params.push(role); }
+  
+  if (startDate && endDate) {
+    sql += " AND DATE(an.created_at) BETWEEN ? AND ?";
+    params.push(startDate, endDate);
+  }
+
+  sql += " ORDER BY an.created_at DESC";
+
+  db.query(sql, params, (err, results) => {
     if (err) return res.status(500).json({ msg: "Error fetching notifications", err });
-    res.status(200).json({ msg: "Notifications retrieved", notifications: results });
+    res.status(200).json({ notifications: results });
   });
 };
+
+exports.getHealthAlerts = (req, res) => {
+  const { status = "open", severity, startDate, endDate } = req.query;
+
+  let sql = `
+    SELECT an.*, e.name AS elder_name, c.name AS sender_name
+    FROM admin_notifications an
+    LEFT JOIN elders e ON an.elder_id = e.elder_id
+    LEFT JOIN caregivers c ON an.sender_id = c.caregiver_id
+    WHERE an.type = 'health_alert'
+  `;
+
+  const params = [];
+  if (status !== "all") { sql += " AND an.status = ?"; params.push(status); }
+  if (severity && severity !== 'all') { sql += " AND an.severity = ?"; params.push(severity); }
+  
+  // NEW: Date Filtering for Health Alerts
+  if (startDate && endDate) {
+    sql += " AND DATE(an.created_at) BETWEEN ? AND ?";
+    params.push(startDate, endDate);
+  }
+
+  sql += " ORDER BY an.created_at DESC";
+
+  db.query(sql, params, (err, results) => {
+    if (err) return res.status(500).json({ msg: "Error fetching alerts", err });
+    res.status(200).json({ alerts: results });
+  });
+};
+
+
 
 // ✅ Mark as read
 exports.markAsRead = (req, res) => {
@@ -35,31 +92,7 @@ exports.triggerExampleNotification = async (req, res) => {
   });
   res.status(200).json({ msg: "Notification sent" });
 };
-// ❤️ Filter only health alert notifications
-exports.getHealthAlerts = (req, res) => {
-  const status = req.query.status || "open"; // 'open' or 'resolved' or 'all'
 
-  let sql = `
-    SELECT id, type, message, severity, status, is_read, user_id, created_at, resolved_at
-    FROM admin_notifications
-    WHERE type = 'health_alert'
-  `;
-
-  const params = [];
-  if (status !== "all") {
-    sql += " AND status = ?";
-    params.push(status);
-  }
-  sql += " ORDER BY created_at DESC";
-
-  db.query(sql, params, (err, results) => {
-    if (err) {
-      console.error("Error fetching health alerts:", err);
-      return res.status(500).json({ msg: "Error fetching health alerts", err });
-    }
-    res.status(200).json({ msg: "Health alerts retrieved", alerts: results });
-  });
-};
 
 // ✅ Resolve / close a health alert (or any notification)
 exports.resolveAlert = (req, res) => {

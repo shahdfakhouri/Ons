@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import 'package:ons_app/services/auth_service.dart';
+import 'package:ons_app/screens/auth/login_page.dart';
+
 import 'pages/dashboard_page.dart';
 import 'pages/caregivers_page.dart';
 import 'pages/assignments_page.dart';
@@ -13,7 +16,6 @@ import 'pages/payments_page.dart';
 import 'pages/transactions_page.dart';
 import 'pages/incidents_page.dart';
 import 'pages/notes_page.dart';
-
 
 class RetirementHomeLayout extends StatefulWidget {
   final int initialIndex;
@@ -40,7 +42,6 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
     'Transactions',
     'Incidents',
     'Notes',
-
   ];
 
   final _pages = const [
@@ -57,7 +58,6 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
     RetirementTransactionsPage(),
     RetirementIncidentsPage(),
     RetirementNotesPage(),
-
   ];
 
   @override
@@ -66,15 +66,24 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
     _index = widget.initialIndex.clamp(0, _pages.length - 1);
   }
 
-  void _goTo(int i) {
-    setState(() => _index = i);
-    if (Navigator.canPop(context)) Navigator.pop(context);
+  void _logout(BuildContext context) {
+    AuthService().logout();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => false,
+    );
   }
 
-  Widget _nav(ColorScheme cs) {
+  // ✅ only close drawer when we are in mobile drawer mode
+  void _goTo(int i, {bool closeDrawer = false}) {
+    setState(() => _index = i);
+    if (closeDrawer) Navigator.of(context).pop(); // closes the drawer only
+  }
+
+  Widget _nav(ColorScheme cs, {required bool closeDrawerOnSelect}) {
     return NavigationDrawer(
       selectedIndex: _index,
-      onDestinationSelected: _goTo,
+      onDestinationSelected: (i) => _goTo(i, closeDrawer: closeDrawerOnSelect),
       children: [
         const SizedBox(height: 8),
         Padding(
@@ -139,21 +148,11 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
           selectedIcon: Icon(Icons.today),
           label: Text('Summaries'),
         ),
-
-        const NavigationDrawerDestination(
-  icon: Icon(Icons.note_alt_outlined),
-  selectedIcon: Icon(Icons.note_alt),
-  label: Text('Notes'),
-),
-
-
-        // ✅ Reports
         const NavigationDrawerDestination(
           icon: Icon(Icons.insights_outlined),
           selectedIcon: Icon(Icons.insights),
           label: Text('Reports'),
         ),
-
         const NavigationDrawerDestination(
           icon: Icon(Icons.payments_outlined),
           selectedIcon: Icon(Icons.payments),
@@ -169,7 +168,11 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
           selectedIcon: Icon(Icons.report),
           label: Text('Incidents'),
         ),
-
+        const NavigationDrawerDestination(
+          icon: Icon(Icons.note_alt_outlined),
+          selectedIcon: Icon(Icons.note_alt),
+          label: Text('Notes'),
+        ),
         const SizedBox(height: 8),
       ],
     );
@@ -179,21 +182,34 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
+    AppBar topBar() => AppBar(
+          title: Text(_titles[_index]),
+          backgroundColor: cs.surface,
+          foregroundColor: cs.onSurface,
+          elevation: 0,
+          actions: [
+            TextButton.icon(
+              onPressed: () => _logout(context),
+              icon: const Icon(Icons.logout, size: 18),
+              label: const Text('Logout'),
+            ),
+            const SizedBox(width: 12),
+          ],
+        );
+
     return LayoutBuilder(
       builder: (context, c) {
         final isWide = c.maxWidth >= 900;
 
         if (isWide) {
           return Scaffold(
-            appBar: AppBar(
-              title: Text(_titles[_index]),
-              backgroundColor: cs.surface,
-              foregroundColor: cs.onSurface,
-              elevation: 0,
-            ),
+            appBar: topBar(),
             body: Row(
               children: [
-                SizedBox(width: 280, child: _nav(cs)),
+                SizedBox(
+                  width: 280,
+                  child: _nav(cs, closeDrawerOnSelect: false), // ✅ don't pop routes
+                ),
                 const VerticalDivider(width: 1),
                 Expanded(
                   child: Center(
@@ -212,8 +228,12 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
         }
 
         return Scaffold(
-          appBar: AppBar(title: Text(_titles[_index])),
-          drawer: Drawer(child: SafeArea(child: _nav(cs))),
+          appBar: topBar(),
+          drawer: Drawer(
+            child: SafeArea(
+              child: _nav(cs, closeDrawerOnSelect: true), // ✅ close drawer only
+            ),
+          ),
           body: Padding(
             padding: const EdgeInsets.all(12),
             child: _pages[_index],

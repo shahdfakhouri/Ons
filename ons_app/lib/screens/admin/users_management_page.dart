@@ -15,11 +15,9 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
 
   bool _loading = true;
   String? _error;
-
   List<Map<String, dynamic>> _all = [];
   String _roleFilter = 'all';
 
-  // Keep these simple; backend will accept what it accepts.
   final List<String> _statusOptions = const ['active', 'inactive', 'blocked'];
 
   @override
@@ -40,11 +38,7 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
+    setState(() { _loading = true; _error = null; });
     try {
       final rows = await _api.getActiveUsers();
       setState(() {
@@ -52,75 +46,210 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
         _loading = false;
       });
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _all = [];
-        _loading = false;
-      });
+      setState(() { _error = e.toString(); _all = []; _loading = false; });
     }
   }
 
   List<Map<String, dynamic>> get _filtered {
     final q = _searchCtrl.text.trim().toLowerCase();
-
     return _all.where((u) {
       final role = _v(u['role'], fallback: '');
       if (_roleFilter != 'all' && role != _roleFilter) return false;
-
       if (q.isEmpty) return true;
-
-      final name = _v(u['name']).toLowerCase();
-      final email = _v(u['email']).toLowerCase();
-      final phone = _v(u['phone']).toLowerCase();
-      final status = _v(u['status']).toLowerCase();
-
-      return name.contains(q) || email.contains(q) || phone.contains(q) || status.contains(q);
+      final searchableText = "${u['name']} ${u['email']} ${u['phone']} ${u['status']}".toLowerCase();
+      return searchableText.contains(q);
     }).toList();
   }
 
-  IconData _roleIcon(String role) {
+  // 🎨 GUI STRENGTH: Enhanced Visual Identities
+  IconData _roleIcon(String role, dynamic employmentType) {
+    if (role == 'caregiver') {
+      return employmentType == 'freelance' ? Icons.person_search : Icons.business_center;
+    }
     switch (role) {
-      case 'caregiver':
-        return Icons.badge_outlined;
-      case 'retirement_home':
-        return Icons.home_work_outlined;
-      case 'family':
-        return Icons.family_restroom_outlined;
-      default:
-        return Icons.person_outline;
+      case 'retirement_home': return Icons.corporate_fare;
+      case 'family': return Icons.people_alt_outlined;
+      case 'elder': return Icons.favorite_border;
+      default: return Icons.person_outline;
+    }
+  }
+
+  Color _roleColor(String role) {
+    switch (role) {
+      case 'caregiver': return Colors.blue;
+      case 'retirement_home': return Colors.purple;
+      case 'family': return Colors.teal;
+      case 'elder': return Colors.redAccent;
+      default: return Colors.grey;
     }
   }
 
   Color _statusColor(String status) {
     switch (status.toLowerCase()) {
-      case 'active':
-        return Colors.green;
-      case 'inactive':
-        return Colors.orange;
+      case 'active': return Colors.green;
+      case 'inactive': return Colors.orange;
       case 'blocked':
-      case 'banned':
-        return Colors.red;
-      default:
-        return Colors.blueGrey;
+      case 'banned': return Colors.red;
+      default: return Colors.blueGrey;
     }
   }
 
-  Future<void> _confirmAndUpdateStatus({
-    required Map<String, dynamic> user,
-    required String newStatus,
-  }) async {
-    final role = _v(user['role'], fallback: '');
-    final id = _v(user['id'], fallback: '');
-    final name = _v(user['name'], fallback: 'user');
-    final oldStatus = _v(user['status'], fallback: '');
+  // 🚀 GUI STRENGTH: Role-Specific Action Deep-Links
+  Widget _buildRoleSpecificAction(Map<String, dynamic> user) {
+    final role = _v(user['role']);
+    if (role == 'elder') {
+      return IconButton(
+        icon: const Icon(Icons.location_on_outlined, color: Colors.red),
+        tooltip: 'View Live Location',
+        onPressed: () => Navigator.pushNamed(context, '/admin/gps-history', arguments: user['id']),
+      );
+    }
+    if (role == 'caregiver' && user['ai_score'] != null) {
+      return IconButton(
+        icon: const Icon(Icons.psychology_outlined, color: Colors.blue),
+        tooltip: 'View AI CV Analysis',
+        onPressed: () => _showAIFeedback(user),
+      );
+    }
+    return const SizedBox.shrink();
+  }
 
-    if (role.isEmpty || id.isEmpty) return;
+  void _showAIFeedback(Map<String, dynamic> user) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text("AI Evaluation: ${user['name']}"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Suitability Score: ${user['ai_score']}%", style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(user['ai_feedback'] ?? "No detailed feedback available."),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("Close"))],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AdminLayout(
+      title: 'Users Management',
+      child: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                _buildSearchHeader(),
+                const SizedBox(height: 12),
+                Expanded(child: _buildUserList()),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildSearchHeader() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _searchCtrl,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  hintText: 'Search (name / email / phone)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            DropdownButton<String>(
+              value: _roleFilter,
+              items: const [
+                DropdownMenuItem(value: 'all', child: Text('All Roles')),
+                DropdownMenuItem(value: 'caregiver', child: Text('Caregivers')),
+                DropdownMenuItem(value: 'family', child: Text('Families')),
+                DropdownMenuItem(value: 'retirement_home', child: Text('Homes')),
+                DropdownMenuItem(value: 'elder', child: Text('Elders')),
+              ],
+              onChanged: (v) => setState(() => _roleFilter = v ?? 'all'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUserList() {
+    if (_filtered.isEmpty) return const Center(child: Text('No users found.'));
+    
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: _filtered.length,
+      itemBuilder: (context, index) {
+        final u = _filtered[index];
+        final role = _v(u['role']);
+        final status = _v(u['status'], fallback: 'active');
+        final color = _statusColor(status);
+        final employmentType = u['employment_type'];
+
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: ListTile(
+            leading: CircleAvatar(
+              backgroundColor: _roleColor(role).withOpacity(0.1),
+              child: Icon(_roleIcon(role, employmentType), color: _roleColor(role)),
+            ),
+            title: Text(_v(u['name']), style: const TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(
+              role == 'caregiver' 
+                  ? "Type: ${employmentType?.toUpperCase() ?? 'STAFF'}\nID: ${_v(u['id'])}"
+                  : "Email: ${_v(u['email'])}\nID: ${_v(u['id'])}",
+              style: const TextStyle(fontSize: 12),
+            ),
+            isThreeLine: true,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildRoleSpecificAction(u), // 🚀 Contextual Action
+                const SizedBox(width: 8),
+                _buildStatusChip(status, color, u),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildStatusChip(String status, Color color, Map<String, dynamic> user) {
+    return PopupMenuButton<String>(
+      onSelected: (v) => _confirmAndUpdateStatus(user: user, newStatus: v),
+      itemBuilder: (_) => _statusOptions.map((s) => PopupMenuItem(value: s, child: Text("Set as $s"))).toList(),
+      child: Chip(
+        label: Text(status.toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+        backgroundColor: color,
+        padding: EdgeInsets.zero,
+      ),
+    );
+  }
+
+  Future<void> _confirmAndUpdateStatus({required Map<String, dynamic> user, required String newStatus}) async {
+    final role = _v(user['role']);
+    final id = _v(user['id']);
+    final name = _v(user['name']);
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Confirm status change'),
-        content: Text('Change $name ($role) from "$oldStatus" to "$newStatus"?'),
+        title: const Text('Update Status'),
+        content: Text('Set $name to "$newStatus"?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm')),
@@ -132,159 +261,15 @@ class _UsersManagementPageState extends State<UsersManagementPage> {
 
     try {
       await _api.updateUserStatus(role: role, id: id, newStatus: newStatus);
-
-      // update locally without reloading
       setState(() {
         final idx = _all.indexWhere((x) => _v(x['role']) == role && _v(x['id']) == id);
         if (idx != -1) _all[idx]['status'] = newStatus;
       });
-
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Updated $name to $newStatus')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Status updated ✅')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Update failed: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AdminLayout(
-      title: 'Users Management',
-      child: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : (_error != null)
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: _load,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                )
-              : Column(
-                  children: [
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 260,
-                              child: TextField(
-                                controller: _searchCtrl,
-                                onChanged: (_) => setState(() {}),
-                                decoration: const InputDecoration(
-                                  labelText: 'Search (name / email / phone / status)',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                            ),
-                            DropdownButton<String>(
-                              value: _roleFilter,
-                              items: const [
-                                DropdownMenuItem(value: 'all', child: Text('All roles')),
-                                DropdownMenuItem(value: 'caregiver', child: Text('Caregivers')),
-                                DropdownMenuItem(value: 'family', child: Text('Families')),
-                                DropdownMenuItem(value: 'retirement_home', child: Text('Retirement homes')),
-                              ],
-                              onChanged: (v) => setState(() => _roleFilter = v ?? 'all'),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: _load,
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Refresh'),
-                            ),
-                            Text('Total: ${_filtered.length}'),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: _filtered.isEmpty
-                          ? const Center(child: Text('No users found.'))
-                          : ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: _filtered.length,
-                              itemBuilder: (context, index) {
-                                final u = _filtered[index];
-
-                                final role = _v(u['role'], fallback: '');
-                                final id = _v(u['id'], fallback: '');
-                                final name = _v(u['name']);
-                                final email = _v(u['email'], fallback: '');
-                                final phone = _v(u['phone'], fallback: '');
-                                final status = _v(u['status'], fallback: 'active');
-
-                                final color = _statusColor(status);
-
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(vertical: 8),
-                                  child: ListTile(
-                                    leading: Icon(_roleIcon(role)),
-                                    title: Text('$name ($role)'),
-                                    subtitle: Text(
-                                      [
-                                        if (email.isNotEmpty) 'Email: $email',
-                                        if (phone.isNotEmpty) 'Phone: $phone',
-                                        'ID: $id',
-                                      ].join('\n'),
-                                    ),
-                                    trailing: Wrap(
-                                      spacing: 10,
-                                      crossAxisAlignment: WrapCrossAlignment.center,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: color.withOpacity(0.12),
-                                            borderRadius: BorderRadius.circular(999),
-                                          ),
-                                          child: Text(
-                                            status,
-                                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                                  color: color,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                          ),
-                                        ),
-                                        DropdownButton<String>(
-                                          value: _statusOptions.contains(status) ? status : _statusOptions.first,
-                                          items: _statusOptions
-                                              .map((s) => DropdownMenuItem(value: s, child: Text('Set: $s')))
-                                              .toList(),
-                                          onChanged: (v) {
-                                            if (v == null || v == status) return;
-                                            _confirmAndUpdateStatus(user: u, newStatus: v);
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                  ],
-                ),
-    );
   }
 }

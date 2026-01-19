@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-
 import 'package:ons_app/core/constants/api_config.dart';
 import 'package:ons_app/services/auth_service.dart';
 
@@ -25,32 +24,52 @@ class AdminNotificationsApi {
     throw Exception('HTTP ${res.statusCode}: ${res.body}');
   }
 
-  // GET /api/notifications/admin
-  Future<List<Map<String, dynamic>>> getAdminNotifications() async {
-    final res = await _client.get(_url('/admin'), headers: _headers());
+  // GET /api/notifications/admin (Separated System Events)
+  Future<List<Map<String, dynamic>>> getAdminNotifications({
+    String? severity,
+    String? role,
+    String? startDate,
+    String? endDate,
+  }) async {
+    final Map<String, String> queryParams = {
+      if (severity != null && severity != 'all') 'severity': severity,
+      if (role != null && role != 'all') 'role': role,
+      if (startDate != null) 'startDate': startDate,
+      if (endDate != null) 'endDate': endDate,
+    };
+
+    String queryString = queryParams.isNotEmpty 
+        ? '?' + queryParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&') 
+        : '';
+
+    final res = await _client.get(_url('/admin$queryString'), headers: _headers());
     final j = _decode(res);
     final list = (j is Map ? (j['notifications'] as List? ?? []) : <dynamic>[]);
     return list.cast<Map<String, dynamic>>();
   }
 
-  // GET /api/notifications/admin/health?status=open|resolved|all
-  Future<List<Map<String, dynamic>>> getHealthAlerts({String status = 'open'}) async {
-    final q = status.isEmpty ? '' : '?status=${Uri.encodeComponent(status)}';
-    final res = await _client.get(_url('/admin/health$q'), headers: _headers());
+  // GET /api/notifications/admin/health (Medical Action Tab)
+  Future<List<Map<String, dynamic>>> getHealthAlerts({
+    String status = 'open',
+    String? severity,
+    String? startDate,
+    String? endDate,
+  }) async {
+    final Map<String, String> queryParams = {
+      'status': status,
+      if (severity != null && severity != 'all') 'severity': severity,
+      if (startDate != null) 'startDate': startDate,
+      if (endDate != null) 'endDate': endDate,
+    };
+    
+    final queryString = '?' + queryParams.entries.map((e) => '${e.key}=${Uri.encodeComponent(e.value)}').join('&');
+    
+    final res = await _client.get(_url('/admin/health$queryString'), headers: _headers());
     final j = _decode(res);
     final list = (j is Map ? (j['alerts'] as List? ?? []) : <dynamic>[]);
     return list.cast<Map<String, dynamic>>();
   }
 
-  // PATCH /api/notifications/admin/:id/read
-  Future<void> markAsRead(int id) async {
-    final res = await _client.patch(_url('/admin/$id/read'), headers: _headers());
-    _decode(res);
-  }
-
-  // PATCH /api/notifications/admin/:id/resolve
-  Future<void> resolveAlert(int id) async {
-    final res = await _client.patch(_url('/admin/$id/resolve'), headers: _headers());
-    _decode(res);
-  }
+  Future<void> markAsRead(int id) async => _decode(await _client.patch(_url('/admin/$id/read'), headers: _headers()));
+  Future<void> resolveAlert(int id) async => _decode(await _client.patch(_url('/admin/$id/resolve'), headers: _headers()));
 }
