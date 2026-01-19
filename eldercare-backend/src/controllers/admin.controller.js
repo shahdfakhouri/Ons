@@ -17,9 +17,10 @@ const pdf = require("pdf-parse-fixed");
 exports.getAllUsers = async (req, res) => {
   try {
     const queries = [
-      "SELECT caregiver_id AS id, name, email, phone, 'caregiver' AS role FROM caregivers",
-      "SELECT home_id AS id, name, contact_email AS email, contact_phone AS phone, 'retirement_home' AS role FROM retirement_homes",
-      "SELECT family_id AS id, name, email, phone, 'family' AS role FROM family_members",
+      // 🛠️ Added city column
+      "SELECT caregiver_id AS id, name, email, phone, city, 'caregiver' AS role FROM caregivers",
+      "SELECT home_id AS id, name, contact_email AS email, contact_phone AS phone, city, 'retirement_home' AS role FROM retirement_homes",
+      "SELECT family_id AS id, name, email, phone, city, 'family' AS role FROM family_members",
       "SELECT elder_id AS id, name, NULL AS email, 'elder' AS role FROM elders"
     ];
 
@@ -45,11 +46,11 @@ exports.getAllUsers = async (req, res) => {
 // ✅ Get pending approvals (caregivers + retirement homes)
 exports.getPendingApprovals = (req, res) => {
   const queries = [
-    // 🛠️ Added employment_type, ai_score, and ai_feedback to the SELECT list
-    "SELECT caregiver_id AS id, name, email, phone, employment_type, ai_score, ai_feedback, 'caregiver' AS role FROM caregivers WHERE is_approved = 0",
-    "SELECT home_id AS id, name, contact_email AS email, contact_phone AS phone, 'retirement_home' AS role FROM retirement_homes WHERE is_approved = 0"
-  ];
-
+    // 🛠️ Added city to the caregiver query
+    "SELECT caregiver_id AS id, name, email, phone, employment_type, ai_score, ai_feedback, city, 'caregiver' AS role FROM caregivers WHERE is_approved = 0",
+    
+    // City is already here for retirement homes
+"SELECT home_id AS id, name, contact_email AS email, contact_phone AS phone, city, services, 'retirement_home' AS role FROM retirement_homes WHERE is_approved = 0"  ];
   let pending = [];
 
   Promise.all(
