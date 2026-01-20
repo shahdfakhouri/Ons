@@ -20,6 +20,13 @@
       };
     }
 
+    Map<String, String> _binaryHeaders() {
+  final token = AuthService().token;
+  return {
+    if (token != null) 'Authorization': 'Bearer $token',
+  };
+}
+
     Uri _url(String path) => Uri.parse('${ApiConfig.adminBase}$path');
 
     void _throwIfBad(http.Response res) {
@@ -28,7 +35,7 @@
     }
 
     Future<Map<String, dynamic>> get(String path) async {
-      final res = await _client.get(_url(path), headers: _headers());
+final res = await _client.get(_url(path), headers: _binaryHeaders());
       _throwIfBad(res);
       return jsonDecode(res.body) as Map<String, dynamic>;
     }
@@ -233,11 +240,12 @@
 Future<Uint8List> getCaregiverCvBytes(String caregiverId) async {
   final res = await _client.get(
     _url('/caregivers/$caregiverId/cv'),
-    headers: _headers(),
+    headers: _binaryHeaders(),
   );
   _throwIfBad(res);
   return res.bodyBytes;
 }
+
 
 Future<Map<String, dynamic>> analyzeCaregiverCv(String caregiverId) async {
   final res = await _client.post(
@@ -246,6 +254,13 @@ Future<Map<String, dynamic>> analyzeCaregiverCv(String caregiverId) async {
   );
   _throwIfBad(res);
   return jsonDecode(res.body) as Map<String, dynamic>;
+}
+
+
+Future<List<Map<String, dynamic>>> getSelectedMatches() async {
+  final j = await get('/matches-selected');
+  final list = (j['matches'] as List?) ?? [];
+  return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
 }
 
 

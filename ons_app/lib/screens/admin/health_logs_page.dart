@@ -17,15 +17,28 @@ class _HealthLogsPageState extends State<HealthLogsPage> {
   String? _error;
   List<Map<String, dynamic>> _rows = [];
 
+  // UI filters
   String _query = '';
-  String _typeFilter = 'All';
-  String _riskFilter = 'All';
+  String _typeFilter = 'All'; 
+  String _riskFilter = 'All'; 
   bool _onlyWithLogs = false;
+
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _query = '';
+      _typeFilter = 'All';
+      _riskFilter = 'All';
+      _onlyWithLogs = false;
+      _searchController.clear();
+    });
   }
 
   Future<void> _load() async {
@@ -48,7 +61,6 @@ class _HealthLogsPageState extends State<HealthLogsPage> {
     }
   }
 
-  // Logic preservation
   String _v(dynamic x, {String fallback = '-'}) {
     final s = (x ?? '').toString().trim();
     return s.isEmpty ? fallback : s;
@@ -73,8 +85,10 @@ class _HealthLogsPageState extends State<HealthLogsPage> {
   String _riskLabel(Map row) {
     final tempStr = _v(row['temperature'], fallback: '');
     final bp = _v(row['blood_pressure'], fallback: '');
+
     final t = double.tryParse(tempStr.replaceAll('°C', '').trim());
     if (t != null && t >= 38.0) return 'High Temp';
+
     final parts = bp.split('/');
     if (parts.isNotEmpty) {
       final sys = int.tryParse(parts.first.trim());
@@ -86,21 +100,16 @@ class _HealthLogsPageState extends State<HealthLogsPage> {
   Color _riskColor(String risk) {
     switch (risk) {
       case 'High Temp':
-      case 'High BP':
-        return Colors.redAccent;
-      default:
-        return Colors.green;
+      case 'High BP': return Colors.redAccent;
+      default: return Colors.green;
     }
   }
 
   Color _typeColor(String type) {
     switch (type.toLowerCase()) {
-      case 'internal':
-        return Colors.indigo;
-      case 'freelance':
-        return Colors.deepPurple;
-      default:
-        return Colors.blueGrey;
+      case 'internal': return Colors.indigo;
+      case 'freelance': return Colors.deepPurple;
+      default: return Colors.blueGrey;
     }
   }
 
@@ -118,7 +127,6 @@ class _HealthLogsPageState extends State<HealthLogsPage> {
       if (_typeFilter != 'All' && employmentType != _typeFilter.toLowerCase()) return false;
       if (_riskFilter != 'All' && risk != _riskFilter) return false;
       if (q.isEmpty) return true;
-
       return elderName.contains(q) || caregiverName.contains(q) || homeName.contains(q);
     }).toList();
   }
@@ -175,6 +183,7 @@ class _HealthLogsPageState extends State<HealthLogsPage> {
             children: [
               Expanded(
                 child: TextField(
+                  controller: _searchController,
                   decoration: InputDecoration(
                     prefixIcon: const Icon(Icons.search, size: 20),
                     hintText: 'Search patients or caregivers...',
@@ -212,6 +221,21 @@ class _HealthLogsPageState extends State<HealthLogsPage> {
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${_filtered.length} patients found',
+                style: TextStyle(fontSize: 12, color: colors.secondary, fontWeight: FontWeight.w500),
+              ),
+              TextButton.icon(
+                onPressed: _clearFilters,
+                icon: const Icon(Icons.filter_list_off, size: 16),
+                label: const Text('Clear Filters', style: TextStyle(fontSize: 12)),
+              ),
+            ],
           ),
         ],
       ),
@@ -341,7 +365,7 @@ class _EnhancedHealthCard extends StatelessWidget {
                   const SizedBox(height: 6),
                   _InfoRow(label: 'Last Vitals Log', value: fmtTime(row['date'])),
                   const SizedBox(height: 6),
-                  _InfoRow(label: 'Total Record Logs', value: logsCount.toString()),
+                  _InfoRow(label: 'Total Logs', value: logsCount.toString()),
                 ],
               ),
             ),

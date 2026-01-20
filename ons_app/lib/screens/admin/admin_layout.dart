@@ -11,7 +11,7 @@ import 'package:ons_app/screens/auth/login_page.dart';
 import 'package:ons_app/screens/admin/weekly_reports_page.dart';
 import 'package:ons_app/screens/admin/users_management_page.dart';
 import 'package:ons_app/screens/admin/elder_assignments_page.dart';
-import 'package:ons_app/screens/admin/gps_overview_page.dart';
+//import 'package:ons_app/screens/admin/gps_overview_page.dart';
 import 'package:ons_app/screens/admin/admin_analytics_page.dart';
 import 'package:ons_app/screens/admin/admin_notifications_page.dart';
 
@@ -284,16 +284,16 @@ _SidebarItem(
 ),
 
 
-_SidebarItem(
-  icon: Icons.location_on_outlined,
-  label: 'GPS overview',
-  selected: currentTitle == 'GPS Overview',
-  onTap: () {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const GpsOverviewPage()),
-    );
-  },
-),
+//_SidebarItem(
+  //icon: Icons.location_on_outlined,
+  //label: 'GPS overview',
+  //selected: currentTitle == 'GPS Overview',
+  //onTap: () {
+    //Navigator.of(context).pushReplacement(
+      //MaterialPageRoute(builder: (_) => const GpsOverviewPage()),
+    //);
+  //},
+//),
 
 _SidebarItem(
   icon: Icons.analytics_outlined,

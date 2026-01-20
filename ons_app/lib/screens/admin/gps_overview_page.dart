@@ -133,18 +133,18 @@ class _GpsOverviewPageState extends State<GpsOverviewPage> {
                                 final elderId = _v(r['elder_id']);
                                 final elderName = _v(r['elder_name']);
                                 final lastSeen = _v(r['last_seen']);
-                                final lat = _v(r['latitude']);
-                                final lng = _v(r['longitude']);
-
-                                // ✅ NEW
                                 final place = _v(r['place_name'], fallback: '');
+final lat = _v(r['latitude']);
+final lng = _v(r['longitude']);
 
-                                final subtitleLines = <String>[
-                                  'Last seen: $lastSeen',
-                                  if (place.isNotEmpty) 'Place: $place',
-                                  'Lat: $lat',
-                                  'Lng: $lng',
-                                ];
+final subtitleLines = <String>[
+  'Last seen: $lastSeen',
+  if (place.isNotEmpty) 'Place: $place'
+  else ...[
+    'Lat: $lat',
+    'Lng: $lng',
+  ],
+];
 
                                 return Card(
                                   margin: const EdgeInsets.symmetric(vertical: 8),

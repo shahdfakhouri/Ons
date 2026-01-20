@@ -60,6 +60,22 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
 
   int _asInt(dynamic x) => int.tryParse(_v(x, fallback: '0')) ?? 0;
 
+  // ✅ Normalizers (fixes the List vs Map crash)
+  List<Map<String, dynamic>> _asListOfMaps(dynamic x) {
+    if (x is List) {
+      return x.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+    return [];
+  }
+
+  Map<String, dynamic> _asMap(dynamic x) {
+    if (x is Map) return Map<String, dynamic>.from(x);
+    if (x is List && x.isNotEmpty && x.first is Map) {
+      return Map<String, dynamic>.from(x.first as Map);
+    }
+    return {};
+  }
+
   Widget _statCard({
     required String title,
     required String value,
@@ -110,7 +126,11 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.red)),
+                      Text(
+                        _error!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red),
+                      ),
                       const SizedBox(height: 12),
                       ElevatedButton.icon(
                         onPressed: _loadAll,
@@ -123,10 +143,11 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    // ===== SUMMARY =====
                     Text(
                       'Overview',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                     ),
                     const SizedBox(height: 10),
 
@@ -135,31 +156,32 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
                         final wide = c.maxWidth > 900;
                         final cross = wide ? 3 : 1;
 
-                        // Your controller returns arrays per key (because query returns rows)
-                        final totalUsersByRole = (_summary['totalUsersByRole'] as List?) ?? [];
-                        final activeCaregivers = ((_summary['activeCaregivers'] as List?) ?? []);
-                        final pendingApprovals = ((_summary['pendingApprovals'] as List?) ?? []);
-                        final elderAssignments = ((_summary['elderAssignments'] as List?) ?? []);
-                        final weeklyReportsCount = ((_summary['weeklyReportsCount'] as List?) ?? []);
+                        // totalUsersByRole -> LIST
+                        final totalUsersByRole = _asListOfMaps(_summary['totalUsersByRole']);
+
+                        // rest -> MAP (even if backend sends list-of-one, this handles it)
+                        final activeCaregivers = _asMap(_summary['activeCaregivers']);
+                        final pendingApprovals = _asMap(_summary['pendingApprovals']);
+                        final elderAssignments = _asMap(_summary['elderAssignments']);
+                        final weeklyReportsCount = _asMap(_summary['weeklyReportsCount']);
 
                         int caregivers = 0, families = 0, homes = 0, elders = 0;
                         for (final r in totalUsersByRole) {
-                          final m = r as Map;
-                          final role = _v(m['role']);
-                          final count = _asInt(m['count']);
+                          final role = _v(r['role']);
+                          final count = _asInt(r['count']);
                           if (role == 'caregiver') caregivers = count;
                           if (role == 'family') families = count;
                           if (role == 'retirement_home') homes = count;
                           if (role == 'elder') elders = count;
                         }
 
-                        final activeCg = activeCaregivers.isNotEmpty ? _asInt((activeCaregivers.first as Map)['active_caregivers']) : 0;
-                        final pending = pendingApprovals.isNotEmpty ? _asInt((pendingApprovals.first as Map)['pending_approvals']) : 0;
+                        final activeCg = _asInt(activeCaregivers['active_caregivers']);
+                        final pending = _asInt(pendingApprovals['pending_approvals']);
 
-                        final assigned = elderAssignments.isNotEmpty ? _asInt((elderAssignments.first as Map)['assigned']) : 0;
-                        final unassigned = elderAssignments.isNotEmpty ? _asInt((elderAssignments.first as Map)['unassigned']) : 0;
+                        final assigned = _asInt(elderAssignments['assigned']);
+                        final unassigned = _asInt(elderAssignments['unassigned']);
 
-                        final reports = weeklyReportsCount.isNotEmpty ? _asInt((weeklyReportsCount.first as Map)['weekly_reports']) : 0;
+                        final reports = _asInt(weeklyReportsCount['weekly_reports']);
 
                         final items = [
                           _statCard(title: 'Caregivers', value: '$caregivers', icon: Icons.badge_outlined),
@@ -190,7 +212,6 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
 
                     const SizedBox(height: 24),
 
-                    // ===== HEALTH ALERTS TIMELINE =====
                     Row(
                       children: [
                         Text(
@@ -223,7 +244,6 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
 
                     const SizedBox(height: 24),
 
-                    // ===== REVENUE TIMELINE =====
                     Text(
                       'Revenue (last 30 days)',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
@@ -245,7 +265,6 @@ class _AdminAnalyticsPageState extends State<AdminAnalyticsPage> {
 
                     const SizedBox(height: 24),
 
-                    // ===== USER GROWTH =====
                     Text(
                       'User Growth (last 12 months)',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),

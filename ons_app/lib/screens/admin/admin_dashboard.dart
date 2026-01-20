@@ -12,7 +12,7 @@ import 'package:ons_app/screens/admin/payments_page.dart';
 import 'package:ons_app/screens/admin/weekly_reports_page.dart';
 import 'package:ons_app/screens/admin/users_management_page.dart';
 import 'package:ons_app/screens/admin/elder_assignments_page.dart';
-import 'package:ons_app/screens/admin/gps_overview_page.dart';
+//import 'package:ons_app/screens/admin/gps_overview_page.dart';
 import 'package:ons_app/screens/admin/admin_analytics_page.dart';
 
 import 'package:ons_app/services/admin_api.dart';
@@ -246,15 +246,15 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                                 const ElderAssignmentsPage(),
                               ),
                             ),
-                            _AdminTile(
-                              icon: Icons.location_on_outlined,
-                              title: 'GPS Overview',
-                              subtitle: 'Last seen locations + history.',
-                              onTap: () => _navReplace(
-                                context,
-                                const GpsOverviewPage(),
-                              ),
-                            ),
+                           // _AdminTile(
+                             // icon: Icons.location_on_outlined,
+                              //title: 'GPS Overview',
+                              //subtitle: 'Last seen locations + history.',
+                              //onTap: () => _navReplace(
+                                //context,
+                               // const GpsOverviewPage(),
+                             // ),
+                           // ),
                             _AdminTile(
                               icon: Icons.analytics_outlined,
                               title: 'Analytics',

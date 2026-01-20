@@ -85,18 +85,17 @@ class _GpsHistoryPageState extends State<GpsHistoryPage> {
                         final h = _history[index] as Map;
 
                         final recordedAt = _v(h['recorded_at']);
-                        final lat = _v(h['latitude']);
-                        final lng = _v(h['longitude']);
-
-                        // ✅ NEW (from backend)
                         final place = _v(h['place_name'], fallback: '');
+final lat = _v(h['latitude']);
+final lng = _v(h['longitude']);
 
-                        final subtitleLines = <String>[
-                          if (place.isNotEmpty) 'Place: $place',
-                          'Lat: $lat',
-                          'Lng: $lng',
-                        ];
-
+final subtitleLines = <String>[
+  if (place.isNotEmpty) 'Place: $place'
+  else ...[
+    'Lat: $lat',
+    'Lng: $lng',
+  ],
+];
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 8),
                           child: ListTile(

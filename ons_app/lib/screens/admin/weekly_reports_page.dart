@@ -33,7 +33,7 @@ class _WeeklyReportsPageState extends State<WeeklyReportsPage> {
   }
 
   String _fmt(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   String? get _fromStr => _from == null ? null : _fmt(_from!);
   String? get _toStr => _to == null ? null : _fmt(_to!);
@@ -44,226 +44,196 @@ class _WeeklyReportsPageState extends State<WeeklyReportsPage> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
+    setState(() { _loading = true; _error = null; });
     try {
       final rows = await _api.getReports(
         caregiverId: _caregiverCtrl.text.trim().isEmpty ? null : _caregiverCtrl.text.trim(),
         from: _fromStr,
         to: _toStr,
       );
-
-      setState(() {
-        _reports = rows;
-        _loading = false;
-      });
+      setState(() { _reports = rows; _loading = false; });
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _reports = [];
-        _loading = false;
-      });
+      setState(() { _error = e.toString(); _reports = []; _loading = false; });
     }
   }
 
-  Future<void> _pickFrom() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
+  Future<void> _pickDateRange() async {
+    final picked = await showDateRangePicker(
       context: context,
-      initialDate: _from ?? now,
-      firstDate: DateTime(now.year - 5),
-      lastDate: DateTime(now.year + 1),
+      firstDate: DateTime(DateTime.now().year - 5),
+      lastDate: DateTime(DateTime.now().year + 1),
+      initialDateRange: _from != null && _to != null 
+          ? DateTimeRange(start: _from!, end: _to!) 
+          : null,
     );
-    if (picked == null) return;
-    setState(() => _from = picked);
-  }
-
-  Future<void> _pickTo() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _to ?? now,
-      firstDate: DateTime(now.year - 5),
-      lastDate: DateTime(now.year + 1),
-    );
-    if (picked == null) return;
-    setState(() => _to = picked);
+    if (picked != null) {
+      setState(() {
+        _from = picked.start;
+        _to = picked.end;
+      });
+      _load();
+    }
   }
 
   void _clearFilters() {
-    setState(() {
-      _from = null;
-      _to = null;
-      _caregiverCtrl.clear();
-    });
+    setState(() { _from = null; _to = null; _caregiverCtrl.clear(); });
     _load();
-  }
-
-  Future<void> _analyze(String reportId) async {
-    try {
-      await _api.analyzeReport(reportId);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('AI analysis complete')),
-      );
-      await _load();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Analyze failed: $e')),
-      );
-    }
-  }
-
-  Future<void> _exportCsv() async {
-    // Backend exports ALL reports (no filters in your controller export route)
-    try {
-      await _api.exportWeeklyReportsCsv();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('CSV fetched. (We’ll add browser download later.)')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export failed: $e')),
-      );
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+
     return AdminLayout(
-      title: 'Weekly Reports',
-      child: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : (_error != null)
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _error!,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: _load,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                )
-              : Column(
-                  children: [
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 240,
-                              child: TextField(
-                                controller: _caregiverCtrl,
-                                decoration: const InputDecoration(
-                                  labelText: 'Caregiver ID (optional)',
-                                  border: OutlineInputBorder(),
-                                ),
-                              ),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: _pickFrom,
-                              icon: const Icon(Icons.date_range),
-                              label: Text('From: ${_fromStr ?? '--'}'),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: _pickTo,
-                              icon: const Icon(Icons.date_range),
-                              label: Text('To: ${_toStr ?? '--'}'),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: _load,
-                              icon: const Icon(Icons.search),
-                              label: const Text('Apply'),
-                            ),
-                            TextButton(
-                              onPressed: _clearFilters,
-                              child: const Text('Clear'),
-                            ),
-                            OutlinedButton.icon(
-                              onPressed: _exportCsv,
-                              icon: const Icon(Icons.download),
-                              label: const Text('Export CSV'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: _reports.isEmpty
-                          ? const Center(child: Text('No weekly reports found.'))
-                          : ListView.builder(
-                              padding: const EdgeInsets.all(16),
-                              itemCount: _reports.length,
-                              itemBuilder: (context, index) {
-                                final r = _reports[index] as Map;
+      title: 'Weekly Performance Reports',
+      child: Column(
+        children: [
+          _buildFilterHeader(colors),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? _buildErrorWidget()
+                    : _buildReportList(colors),
+          ),
+        ],
+      ),
+    );
+  }
 
-                                final reportId = _v(r['report_id']);
-                                final caregiverName = _v(r['caregiver_name']);
-                                final elderName = _v(r['elder_name']);
-                                final weekStart = _v(r['week_start']);
-                                final weekEnd = _v(r['week_end']);
-                                final createdAt = _v(r['created_at']);
-                                final summary = _v(r['summary'], fallback: '');
-                                final aiFeedback = _v(r['ai_feedback'], fallback: '');
+  Widget _buildFilterHeader(ColorScheme colors) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _caregiverCtrl,
+              onSubmitted: (_) => _load(),
+              decoration: InputDecoration(
+                hintText: 'Search by Caregiver ID...',
+                prefixIcon: const Icon(Icons.person_search),
+                isDense: true,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          TextButton.icon(
+            onPressed: _pickDateRange,
+            icon: const Icon(Icons.date_range),
+            label: Text(_from == null ? 'Filter Date' : '${_fmt(_from!)} - ${_fmt(_to!)}'),
+            style: TextButton.styleFrom(foregroundColor: colors.primary),
+          ),
+          if (_from != null || _caregiverCtrl.text.isNotEmpty)
+            IconButton(
+              onPressed: _clearFilters,
+              icon: const Icon(Icons.clear_all),
+              tooltip: 'Clear Filters',
+            ),
+          const SizedBox(width: 12),
+          ElevatedButton.icon(
+            onPressed: _load,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
 
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(vertical: 8),
-                                  child: ExpansionTile(
-                                    title: Text('$elderName — $caregiverName'),
-                                    subtitle: Text('Week: $weekStart → $weekEnd\nCreated: $createdAt'),
-                                    childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                                    children: [
-                                      if (summary.trim().isNotEmpty) ...[
-                                        const SizedBox(height: 8),
-                                        const Text('Summary:', style: TextStyle(fontWeight: FontWeight.bold)),
-                                        const SizedBox(height: 6),
-                                        Text(summary),
-                                      ],
-                                      const SizedBox(height: 12),
-                                      const Text('AI Feedback:', style: TextStyle(fontWeight: FontWeight.bold)),
-                                      const SizedBox(height: 6),
-                                      Text(aiFeedback.isEmpty ? 'Not analyzed yet.' : aiFeedback),
-                                      const SizedBox(height: 12),
-                                      Align(
-                                        alignment: Alignment.centerRight,
-                                        child: Wrap(
-                                          spacing: 8,
-                                          children: [
-                                            OutlinedButton(
-                                              onPressed: () => _analyze(reportId),
-                                              child: const Text('Analyze with AI'),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
-                            ),
-                    ),
-                  ],
+  Widget _buildReportList(ColorScheme colors) {
+    if (_reports.isEmpty) {
+      return const Center(child: Text('No weekly reports found for this period.'));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _reports.length,
+      itemBuilder: (context, index) {
+        final r = _reports[index] as Map;
+        final caregiver = _v(r['caregiver_name']);
+        final elder = _v(r['elder_name']);
+        final summary = _v(r['summary'], fallback: 'No summary provided for this week.');
+
+        return Card(
+          elevation: 0,
+          margin: const EdgeInsets.only(bottom: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: colors.outlineVariant),
+          ),
+          child: ExpansionTile(
+            tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            leading: CircleAvatar(
+              backgroundColor: colors.primaryContainer,
+              child: Icon(Icons.article_outlined, color: colors.onPrimaryContainer),
+            ),
+            title: Text(
+              '$elder — $caregiver',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(
+              'Week of ${_v(r['week_start'])} to ${_v(r['week_end'])}',
+              style: TextStyle(fontSize: 12, color: colors.secondary),
+            ),
+            childrenPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            children: [
+              const Divider(),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.notes, size: 16, color: colors.primary),
+                  const SizedBox(width: 8),
+                  const Text('Weekly Summary', style: TextStyle(fontWeight: FontWeight.bold)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colors.surfaceVariant.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
                 ),
+                child: Text(
+                  summary,
+                  style: const TextStyle(height: 1.5),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Filed on: ${_v(r['created_at'])}',
+                  style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: colors.outline),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildErrorWidget() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 48),
+            const SizedBox(height: 16),
+            Text(_error!, textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _load, child: const Text('Retry')),
+          ],
+        ),
+      ),
     );
   }
 }
