@@ -228,11 +228,12 @@ class CaregiverApi {
   // ✅ ALERTS
   // =======================
 
-  Future<List<Map<String, dynamic>>> getMyAlerts() async {
-    final j = await get('/alerts');
-    final list = (j['alerts'] as List?) ?? [];
-    return list.map((e) => Map<String, dynamic>.from(e)).toList();
-  }
+Future<List<Map<String, dynamic>>> getMyAlerts() async {
+  final j = await get('/alerts');
+  final list = (j['alerts'] as List?) ?? [];
+  return list.map((e) => Map<String, dynamic>.from(e)).toList();
+}
+
 
   Future<List<Map<String, dynamic>>> getElderAlerts(int elderId) async {
     final j = await get('/elders/$elderId/alerts');

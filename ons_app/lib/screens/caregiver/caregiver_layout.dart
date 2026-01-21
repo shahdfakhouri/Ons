@@ -6,8 +6,8 @@ import 'package:ons_app/screens/auth/login_page.dart';
 import 'pages/dashboard_page.dart';
 import 'pages/elders_page.dart';
 import 'pages/alerts_page.dart';
-import 'pages/visits_page.dart';
-import 'pages/incidents_page.dart';
+//import 'pages/visits_page.dart';
+//import 'pages/incidents_page.dart';
 import 'pages/shifts_page.dart';
 import 'pages/earnings_page.dart';
 
@@ -36,8 +36,8 @@ class _CaregiverLayoutState extends State<CaregiverLayout> {
     DashboardPage(),
     EldersPage(),
     AlertsPage(),
-    VisitsPage(),
-    IncidentsPage(),
+   // VisitsPage(),
+    //IncidentsPage(),
     ShiftsPage(),
     EarningsPage(),
   ];
@@ -102,16 +102,8 @@ class _CaregiverLayoutState extends State<CaregiverLayout> {
                       selectedIcon: Icon(Icons.notifications),
                       label: Text('Alerts'),
                     ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.event_outlined),
-                      selectedIcon: Icon(Icons.event),
-                      label: Text('Visits'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.report_gmailerrorred_outlined),
-                      selectedIcon: Icon(Icons.report),
-                      label: Text('Incidents'),
-                    ),
+                   
+                    
                     NavigationRailDestination(
                       icon: Icon(Icons.schedule_outlined),
                       selectedIcon: Icon(Icons.schedule),

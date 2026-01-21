@@ -19,7 +19,8 @@ class _AlertsPageState extends State<AlertsPage> {
   String _fmt(dynamic v) {
     if (v == null) return '-';
     try {
-      return DateFormat('yyyy-MM-dd HH:mm').format(DateTime.parse(v.toString()));
+      final dt = DateTime.parse(v.toString()).toLocal();
+      return DateFormat('MMM d, yyyy • h:mm a').format(dt); // Jan 19, 2026 • 6:06 PM
     } catch (_) {
       return v.toString();
     }
@@ -40,6 +41,7 @@ class _AlertsPageState extends State<AlertsPage> {
     } catch (e) {
       setState(() {
         _error = e.toString();
+        _alerts = [];
         _loading = false;
       });
     }
@@ -105,7 +107,7 @@ class _AlertsPageState extends State<AlertsPage> {
                 ),
                 title: Text((a['message'] ?? 'Alert').toString()),
                 subtitle: Text(
-                  'Elder: ${a['elder_name'] ?? '-'} (#${a['elder_id'] ?? '-'})\n'
+                  'Elder: ${a['elder_name'] ?? '-'}\n'
                   'Type: ${a['type'] ?? '-'} • Created: ${_fmt(a['created_at'])}',
                 ),
                 trailing: Container(
@@ -115,7 +117,7 @@ class _AlertsPageState extends State<AlertsPage> {
                     border: Border.all(color: cs.outlineVariant),
                   ),
                   child: Text(
-                    (a['severity'] ?? 'medium').toString(),
+                    (a['severity'] ?? 'medium').toString().toUpperCase(),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),

@@ -148,10 +148,7 @@ class _ShiftsPageState extends State<ShiftsPage> {
                         const SizedBox(height: 10),
                         FilledButton.icon(onPressed: _start, icon: const Icon(Icons.play_arrow), label: const Text('Start shift')),
                         const SizedBox(height: 6),
-                        Text(
-                          'Note: freelance caregivers may always see "no shift".',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        )
+                  
                       ],
                     )
                   : Column(
@@ -160,7 +157,8 @@ class _ShiftsPageState extends State<ShiftsPage> {
                         Text('Active shift', style: Theme.of(context).textTheme.titleMedium),
                         const SizedBox(height: 8),
                         Text('Started: ${_fmt(_active!['shift_start'])}'),
-                        Text('Home: ${_active!['home_id'] ?? '-'}'),
+                        Text('Home: ${_active!['home_name'] ?? '-'}'),
+
                         const SizedBox(height: 10),
                         FilledButton.icon(onPressed: _end, icon: const Icon(Icons.stop), label: const Text('End shift')),
                       ],
