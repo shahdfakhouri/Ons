@@ -1,3 +1,6 @@
+// =======================
+// CaregiverLayout (FINAL)
+// =======================
 import 'package:flutter/material.dart';
 
 import 'package:ons_app/services/auth_service.dart';
@@ -6,10 +9,10 @@ import 'package:ons_app/screens/auth/login_page.dart';
 import 'pages/dashboard_page.dart';
 import 'pages/elders_page.dart';
 import 'pages/alerts_page.dart';
-//import 'pages/visits_page.dart';
-//import 'pages/incidents_page.dart';
 import 'pages/shifts_page.dart';
 import 'pages/earnings_page.dart';
+
+import 'package:ons_app/screens/chat_h2h/conversations_page.dart';
 
 class CaregiverLayout extends StatefulWidget {
   final int initialIndex;
@@ -26,8 +29,7 @@ class _CaregiverLayoutState extends State<CaregiverLayout> {
     'Dashboard',
     'Elders',
     'Alerts',
-    'Visits',
-    'Incidents',
+    'Chats',
     'Shifts',
     'Earnings',
   ];
@@ -36,8 +38,7 @@ class _CaregiverLayoutState extends State<CaregiverLayout> {
     DashboardPage(),
     EldersPage(),
     AlertsPage(),
-   // VisitsPage(),
-    //IncidentsPage(),
+    ChatH2HConversationsPage(), // ✅ NEW
     ShiftsPage(),
     EarningsPage(),
   ];
@@ -102,8 +103,11 @@ class _CaregiverLayoutState extends State<CaregiverLayout> {
                       selectedIcon: Icon(Icons.notifications),
                       label: Text('Alerts'),
                     ),
-                   
-                    
+                    NavigationRailDestination(
+                      icon: Icon(Icons.chat_bubble_outline),
+                      selectedIcon: Icon(Icons.chat_bubble),
+                      label: Text('Chats'),
+                    ),
                     NavigationRailDestination(
                       icon: Icon(Icons.schedule_outlined),
                       selectedIcon: Icon(Icons.schedule),
@@ -140,34 +144,12 @@ class _CaregiverLayoutState extends State<CaregiverLayout> {
             selectedIndex: _index,
             onDestinationSelected: (v) => setState(() => _index = v),
             destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.dashboard_outlined),
-                label: 'Dashboard',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.people_outline),
-                label: 'Elders',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.notifications_none),
-                label: 'Alerts',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.event_outlined),
-                label: 'Visits',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.report_gmailerrorred_outlined),
-                label: 'Incidents',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.schedule_outlined),
-                label: 'Shifts',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.savings_outlined),
-                label: 'Earnings',
-              ),
+              NavigationDestination(icon: Icon(Icons.dashboard_outlined), label: 'Dashboard'),
+              NavigationDestination(icon: Icon(Icons.people_outline), label: 'Elders'),
+              NavigationDestination(icon: Icon(Icons.notifications_none), label: 'Alerts'),
+              NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: 'Chats'),
+              NavigationDestination(icon: Icon(Icons.schedule_outlined), label: 'Shifts'),
+              NavigationDestination(icon: Icon(Icons.savings_outlined), label: 'Earnings'),
             ],
           ),
         );

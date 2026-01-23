@@ -1,6 +1,14 @@
+// ======================
+// CAREGIVER: EldersPage (with Chat button per elder)
+// ======================
 import 'package:flutter/material.dart';
 import 'package:ons_app/services/caregiver_api.dart';
 import 'elder_detail_page.dart';
+
+import 'package:ons_app/services/chat_h2h_api.dart';
+import 'package:ons_app/screens/chat_h2h/chat_page.dart';
+import 'package:ons_app/services/auth_service.dart';
+
 
 class EldersPage extends StatefulWidget {
   const EldersPage({super.key});
@@ -11,8 +19,11 @@ class EldersPage extends StatefulWidget {
 
 class _EldersPageState extends State<EldersPage> {
   final _api = CaregiverApi();
+  final _chatApi = ChatH2HApi();
 
   bool _loading = true;
+  bool _chatBusy = false;
+
   String? _error;
   List<Map<String, dynamic>> _elders = [];
   String _q = '';
@@ -34,6 +45,70 @@ class _EldersPageState extends State<EldersPage> {
         _error = e.toString();
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _openChatForElder(Map<String, dynamic> e) async {
+    if (_chatBusy) return;
+
+    final elderId = int.tryParse((e['elder_id'] ?? '').toString());
+    if (elderId == null) return;
+
+    // IMPORTANT:
+    // This requires backend to return family_id in getAssignedElders(),
+    // OR you add an endpoint to fetch family_id for this elder.
+    final familyId = int.tryParse((e['family_id'] ?? '').toString());
+    if (familyId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Missing family_id for this elder. Add it to /caregiver/elders response.')),
+      );
+      return;
+    }
+
+    // caregiver id comes from JWT on backend, but your API expects it in body too.
+    // You can either:
+    // 1) decode it from token, or
+    // 2) modify backend to ignore caregiverId and use req.user.id
+    //
+    // For now we assume token already has id and you can pass it by decoding the JWT
+    // OR you already added caregiver_id in each elder row.
+final caregiverId = AuthService().myId;
+if (caregiverId == null) {
+  if (!mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Missing caregiver id (login again).')),
+  );
+  return;
+}
+
+
+
+
+    setState(() => _chatBusy = true);
+
+    try {
+      final res = await _chatApi.createOrGetConversation(
+        elderId: elderId,
+        caregiverId: caregiverId,
+        familyId: familyId,
+      );
+
+      final convId = (res['conversationId'] ?? '').toString();
+      if (convId.isEmpty) throw Exception('No conversationId returned');
+
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ChatH2HPage(conversationId: convId)),
+      );
+    } catch (err) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Chat failed: $err')),
+      );
+    } finally {
+      if (mounted) setState(() => _chatBusy = false);
     }
   }
 
@@ -110,7 +185,17 @@ class _EldersPageState extends State<EldersPage> {
               subtitle: Text(
                 'Age: ${e['age'] ?? '-'} • Gender: ${e['gender'] ?? '-'}\nLast check-in: ${e['last_check_in'] ?? '-'}',
               ),
-              trailing: const Icon(Icons.chevron_right),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Chat with family',
+                    onPressed: _chatBusy ? null : () => _openChatForElder(e),
+                    icon: const Icon(Icons.chat_bubble_outline),
+                  ),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
               onTap: () {
                 final id = int.tryParse(e['elder_id'].toString());
                 if (id == null) return;

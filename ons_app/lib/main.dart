@@ -1,5 +1,5 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:ons_app/core/theme/app_theme.dart';
 
 // screens
@@ -10,20 +10,27 @@ import 'package:ons_app/screens/caregiver/caregiver_layout.dart';
 import 'package:ons_app/screens/retirement_home/retirement_home_layout.dart';
 import 'package:ons_app/screens/family/family_layout.dart';
 import 'package:ons_app/screens/elder/elder_layout.dart';
-
+import 'package:ons_app/screens/elder/pages/elder_pin_login_page.dart';
 
 // services
 import 'package:ons_app/services/auth_service.dart';
 import 'package:ons_app/services/elder_auth_service.dart';
 
-// elder pages (YOUR STRUCTURE)
-import 'package:ons_app/screens/elder/pages/elder_pin_login_page.dart';
+// firebase (only used on mobile)
+import 'package:firebase_core/firebase_core.dart';
+import 'package:ons_app/services/fcm_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await AuthService().loadSession();       // normal users token
-  await ElderAuthService().loadSession();  // elder token
+  // ✅ Firebase + FCM only on Android/iOS (skip on Web/Chrome)
+  if (!kIsWeb) {
+    await Firebase.initializeApp();
+    await FcmService.init(); // prints FCM token (on Android)
+  }
+
+  await AuthService().loadSession();
+  await ElderAuthService().loadSession();
 
   runApp(const OnsApp());
 }
@@ -41,18 +48,13 @@ class OnsApp extends StatelessWidget {
       routes: {
         '/home': (_) => const HomePage(),
         '/login': (_) => const LoginPage(),
-
-        // dashboards by role
         '/admin/dashboard': (_) => const AdminDashboardPage(),
         '/caregiver/dashboard': (_) => const CaregiverLayout(),
         '/retirement/dashboard': (_) => const RetirementHomeLayout(),
         '/family/dashboard': (_) => const FamilyLayout(),
-
-        // ✅ Elder (separate flow, no UserRole needed)
         '/elder/login': (_) => const ElderLoginPage(),
         '/elder/dashboard': (_) => const ElderLayout(),
-}
-
+      },
     );
   }
 }

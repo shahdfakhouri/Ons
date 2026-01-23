@@ -1,3 +1,6 @@
+// =======================
+// FamilyLayout (FINAL)
+// =======================
 import 'package:flutter/material.dart';
 
 import 'package:ons_app/services/auth_service.dart';
@@ -10,9 +13,10 @@ import 'pages/matching/match_page.dart';
 import 'pages/alerts/alerts_page.dart';
 import 'pages/calendar/calendar_page.dart';
 import 'pages/calls/calls_page.dart';
-
 import 'pages/notifications/notifications_page.dart';
 import 'pages/payments/family_payments_page.dart';
+
+import 'package:ons_app/screens/chat_h2h/conversations_page.dart';
 
 class FamilyLayout extends StatefulWidget {
   const FamilyLayout({super.key});
@@ -35,15 +39,16 @@ class _FamilyLayoutState extends State<FamilyLayout> {
   }
 
   late final List<Widget> _pages = [
-    FamilyDashboardPage(onNavigate: _goTo),
-    const FamilyNotificationsPage(),
-    const EldersListPage(),
-    const MatchPage(),
-    const AlertsPage(),
-    const CalendarPage(),
-    const CallsPage(),
-    const FamilyPaymentsPage(), // ✅ index 7
-    const FamilyProfilePage(),  // ✅ index 8
+    FamilyDashboardPage(onNavigate: _goTo),     // 0
+    const FamilyNotificationsPage(),            // 1
+    const ChatH2HConversationsPage(),           // 2 ✅ Chats
+    const EldersListPage(),                     // 3
+    const MatchPage(),                          // 4
+    const AlertsPage(),                         // 5
+    const CalendarPage(),                       // 6
+    const CallsPage(),                          // 7
+    const FamilyPaymentsPage(),                 // 8
+    const FamilyProfilePage(),                  // 9
   ];
 
   @override
@@ -74,12 +79,13 @@ class _FamilyLayoutState extends State<FamilyLayout> {
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Dash'),
             BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'Inbox'),
+            BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chats'),
             BottomNavigationBarItem(icon: Icon(Icons.groups), label: 'Elders'),
             BottomNavigationBarItem(icon: Icon(Icons.auto_awesome), label: 'Match'),
             BottomNavigationBarItem(icon: Icon(Icons.warning_amber), label: 'Alerts'),
             BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Calendar'),
             BottomNavigationBarItem(icon: Icon(Icons.call), label: 'Calls'),
-            BottomNavigationBarItem(icon: Icon(Icons.payments_outlined), label: 'Payments'), // ✅ NEW
+            BottomNavigationBarItem(icon: Icon(Icons.payments_outlined), label: 'Payments'),
             BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
           ],
         ),
@@ -105,6 +111,11 @@ class _FamilyLayoutState extends State<FamilyLayout> {
                 icon: Icon(Icons.notifications_outlined),
                 selectedIcon: Icon(Icons.notifications),
                 label: Text('Inbox'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.chat_bubble_outline),
+                selectedIcon: Icon(Icons.chat_bubble),
+                label: Text('Chats'),
               ),
               NavigationRailDestination(
                 icon: Icon(Icons.groups_outlined),
