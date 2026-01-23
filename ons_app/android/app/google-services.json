@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "420799347501",
+    "project_id": "ons-swp",
+    "storage_bucket": "ons-swp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:420799347501:android:7317a532a8bde752beb1a4",
+        "android_client_info": {
+          "package_name": "com.example.ons_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA2j9-MpWwdmLQm-jP9v_cOpvePTgluXwA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

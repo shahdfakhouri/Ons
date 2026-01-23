@@ -54,92 +54,184 @@ class _EarningsPageState extends State<EarningsPage> {
   String _prettyDate(dynamic raw) {
     final s = _v(raw, fallback: '');
     if (s.isEmpty || s == '-') return '-';
-
-    // handles: 2026-01-19T14:20:07.000Z
     DateTime? dt = DateTime.tryParse(s);
-
-    // fallback for MySQL style: 2026-01-19 15:19:50
     dt ??= DateTime.tryParse(s.replaceFirst(' ', 'T'));
-
     if (dt == null) return s;
-
-    // show in local time
     final local = dt.isUtc ? dt.toLocal() : dt;
     return DateFormat('MMM d, yyyy • h:mm a').format(local);
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+
     if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return _buildErrorState(cs);
 
-    if (_error != null) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Error: $_error', textAlign: TextAlign.center),
-            const SizedBox(height: 10),
-            ElevatedButton.icon(
-              onPressed: _load,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final total =
-        _rev['receiver_revenue'] ?? _rev['totalRevenue'] ?? _rev['total_revenue'] ?? 0;
+    final total = _rev['receiver_revenue'] ?? _rev['totalRevenue'] ?? _rev['total_revenue'] ?? 0;
 
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         children: [
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.savings),
-              title: const Text('Total earnings'),
-              trailing: Text('$total', style: Theme.of(context).textTheme.titleLarge),
+          // 🏆 SECTION 1: Wallet Hero Card
+          _buildWalletHeader(total, cs, tt),
+          const SizedBox(height: 32),
+
+          // 🏛️ SECTION 2: Transaction History Title
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Transaction History', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              Text('${_tx.length} Records', style: tt.bodySmall?.copyWith(color: cs.secondary)),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // 🏛️ SECTION 3: Transaction List
+          if (_tx.isEmpty)
+            _buildEmptyState(cs)
+          else
+            ..._tx.map((t) => _buildTransactionItem(t, cs, tt)).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWalletHeader(dynamic total, ColorScheme cs, TextTheme tt) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [cs.primary, cs.primary.withOpacity(0.8)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: cs.primary.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Available Balance', style: TextStyle(color: cs.onPrimary.withOpacity(0.8), fontSize: 14)),
+              Icon(Icons.account_balance_wallet_rounded, color: cs.onPrimary.withOpacity(0.5)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '\$${_v(total)}',
+            style: tt.headlineLarge?.copyWith(color: cs.onPrimary, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: cs.onPrimary.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.verified_user_outlined, color: cs.onPrimary, size: 14),
+                const SizedBox(width: 8),
+                Text('Secure Payouts Enabled', style: TextStyle(color: cs.onPrimary, fontSize: 11)),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransactionItem(Map<String, dynamic> t, ColorScheme cs, TextTheme tt) {
+    final fromLabel = (t['from_name']?.toString().trim().isNotEmpty == true)
+        ? t['from_name']
+        : '${t['from_role'] ?? 'System'}';
+    
+    final isIncome = _v(t['type']).toLowerCase().contains('payment') || _v(t['type']).toLowerCase().contains('credit');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: isIncome ? Colors.green.withOpacity(0.1) : cs.surfaceVariant,
+            child: Icon(
+              isIncome ? Icons.south_west_rounded : Icons.north_east_rounded,
+              color: isIncome ? Colors.green : cs.onSurfaceVariant,
+              size: 18,
             ),
           ),
-          const SizedBox(height: 12),
-          Text('Recent transactions', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          if (_tx.isEmpty)
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('No transactions yet.'),
-              ),
-            )
-          else
-            Card(
-              child: ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _tx.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (context, i) {
-                  final t = _tx[i];
-
-                  final fromLabel =
-                      (t['from_name']?.toString().trim().isNotEmpty == true)
-                          ? t['from_name']
-                          : '${t['from_role'] ?? '-'}';
-
-                  return ListTile(
-                    leading: const Icon(Icons.swap_horiz),
-                    title: Text('${_v(t['type'])} • ${_v(t['amount'])}'),
-                    subtitle: Text(
-                      'From: $fromLabel\n'
-                      '${_prettyDate(t['created_at'])}',
-                    ),
-                  );
-                },
-              ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_v(t['type']), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text('From: $fromLabel', style: tt.bodySmall?.copyWith(color: cs.secondary)),
+              ],
             ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${isIncome ? "+" : ""}\$${_v(t['amount'])}',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isIncome ? Colors.green : cs.onSurface,
+                ),
+              ),
+              Text(_prettyDate(t['created_at']), style: const TextStyle(fontSize: 10, color: Colors.grey)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(ColorScheme cs) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          children: [
+            Icon(Icons.receipt_long_outlined, size: 48, color: cs.outline),
+            const SizedBox(height: 16),
+            const Text('No transactions to show yet.'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState(ColorScheme cs) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline, color: cs.error, size: 48),
+          const SizedBox(height: 16),
+          Text('Error: $_error', textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          ElevatedButton(onPressed: _load, child: const Text('Retry')),
         ],
       ),
     );

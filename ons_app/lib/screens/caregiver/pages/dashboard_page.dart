@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:ons_app/services/caregiver_api.dart';
+import 'package:ons_app/services/payment_api.dart';
 import 'package:ons_app/screens/caregiver/caregiver_layout.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -10,133 +11,16 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  final _api = CaregiverApi();
-
+  final _caregiverApi = CaregiverApi();
+  final _paymentApi = PaymentApi();
+  
   bool _loading = true;
   String? _error;
-
+  
   Map<String, dynamic>? _profile;
-
-  void _snack(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
-
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
-    try {
-      await _api.getDashboard();
-      final profile = await _api.getMyProfile();
-
-      setState(() {
-        _profile = profile;
-        _loading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _openEditProfile() async {
-    final p = _profile ?? {};
-
-    final phone = TextEditingController(text: (p['phone'] ?? '').toString());
-    final city = TextEditingController(text: (p['city'] ?? '').toString());
-    final skills = TextEditingController(text: (p['skills'] ?? '').toString());
-    final expectedSalary = TextEditingController(text: (p['expected_salary'] ?? '').toString());
-    final hoursPerDay = TextEditingController(text: (p['hours_per_day'] ?? '').toString());
-    final status = TextEditingController(text: (p['status'] ?? '').toString());
-    final lat = TextEditingController(text: (p['latitude'] ?? '').toString());
-    final lng = TextEditingController(text: (p['longitude'] ?? '').toString());
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit profile'),
-        content: SingleChildScrollView(
-          child: Column(
-            children: [
-              TextField(controller: phone, decoration: const InputDecoration(labelText: 'Phone')),
-              TextField(controller: city, decoration: const InputDecoration(labelText: 'City')),
-              TextField(controller: skills, decoration: const InputDecoration(labelText: 'Skills'), maxLines: 2),
-              TextField(
-                controller: expectedSalary,
-                decoration: const InputDecoration(labelText: 'Expected salary'),
-                keyboardType: TextInputType.number,
-              ),
-              TextField(
-                controller: hoursPerDay,
-                decoration: const InputDecoration(labelText: 'Hours per day'),
-                keyboardType: TextInputType.number,
-              ),
-              TextField(controller: status, decoration: const InputDecoration(labelText: 'Status')),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: lat,
-                      decoration: const InputDecoration(labelText: 'Latitude'),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: lng,
-                      decoration: const InputDecoration(labelText: 'Longitude'),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
-        ],
-      ),
-    );
-
-    if (ok != true) return;
-
-    double? _tryDouble(String s) => s.trim().isEmpty ? null : double.tryParse(s.trim());
-    int? _tryInt(String s) => s.trim().isEmpty ? null : int.tryParse(s.trim());
-
-    final body = <String, dynamic>{
-      'phone': phone.text.trim().isEmpty ? null : phone.text.trim(),
-      'city': city.text.trim().isEmpty ? null : city.text.trim(),
-      'skills': skills.text.trim().isEmpty ? null : skills.text.trim(),
-      'expected_salary': _tryDouble(expectedSalary.text),
-      'hours_per_day': _tryInt(hoursPerDay.text),
-      'status': status.text.trim().isEmpty ? null : status.text.trim(),
-      'latitude': _tryDouble(lat.text),
-      'longitude': _tryDouble(lng.text),
-    };
-
-    try {
-      await _api.updateProfile(body);
-      _snack('Profile updated ✅');
-      await _load();
-    } catch (e) {
-      _snack('Failed: $e');
-    }
-  }
-
-  void _goTab(int index) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => CaregiverLayout(initialIndex: index)),
-    );
-  }
+  Map<String, dynamic>? _activeShift; 
+  double _totalRevenue = 0.0;
+  int _totalCompletedShifts = 0;
 
   @override
   void initState() {
@@ -144,143 +28,281 @@ class _DashboardPageState extends State<DashboardPage> {
     _load();
   }
 
+  Future<void> _load() async {
+    if (!mounted) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      // ✅ Using exact method names from your CaregiverApi class
+      final results = await Future.wait([
+        _caregiverApi.getMyProfile(),
+        _paymentApi.getReceiverRevenue(),
+        _caregiverApi.getMyShiftHistory(limit: 100), // Updated endpoint name
+        _caregiverApi.getMyActiveShift(),           // Updated endpoint name
+      ]);
+      
+      if (mounted) {
+        setState(() {
+          _profile = results[0] as Map<String, dynamic>;
+          
+          // 💰 Handle Revenue
+          final revRes = results[1] as Map<String, dynamic>;
+          _totalRevenue = double.tryParse(revRes['receiver_revenue']?.toString() ?? '0.0') ?? 0.0;
+          
+          // 🕒 Handle Shift History (Count only completed ones)
+          final historyList = results[2] as List<dynamic>;
+          _totalCompletedShifts = historyList.where((s) => s['shift_end'] != null).length;
+          
+          // 🟢 Handle Current Active Shift
+          _activeShift = results[3] as Map<String, dynamic>?; 
+          
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  void _goTab(int index) {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => CaregiverLayout(initialIndex: index)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
 
     if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return _buildErrorState(cs, tt);
 
-    if (_error != null) {
-      return Center(
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Failed to load dashboard', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Text(_error!, style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 12),
-                FilledButton(onPressed: _load, child: const Text('Retry')),
-              ],
-            ),
+    final name = (_profile?['name'] ?? 'Caregiver').toString();
+    final bool isOnShift = _activeShift != null;
+
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          _buildHeroHeader(name, isOnShift, cs, tt),
+          const SizedBox(height: 24),
+
+          _buildMetricsRow(cs, tt),
+          const SizedBox(height: 24),
+
+          Text('Navigation Hub', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 1.3,
+            children: [
+              _NavTile(icon: Icons.people_alt_rounded, label: 'Elders', color: Colors.indigo, onTap: () => _goTab(1)),
+              _NavTile(icon: Icons.chat_bubble_rounded, label: 'Messages', color: Colors.blue, onTap: () => _goTab(3)),
+              _NavTile(icon: Icons.notifications_active_rounded, label: 'Alerts', color: Colors.redAccent, onTap: () => _goTab(2)),
+              _NavTile(icon: Icons.payments_rounded, label: 'Earnings', color: Colors.green, onTap: () => _goTab(5)),
+            ],
           ),
-        ),
-      );
-    }
+          const SizedBox(height: 16),
+          
+          _FullWidthAction(
+            icon: Icons.history_rounded,
+            label: "View All Shift History",
+            onTap: () => _goTab(4),
+            cs: cs,
+          ),
+        ],
+      ),
+    );
+  }
 
-    final p = _profile ?? {};
-    final name = (p['name'] ?? 'Caregiver').toString();
-    final phone = (p['phone'] ?? '-').toString();
-    final city = (p['city'] ?? '-').toString();
-    final status = (p['status'] ?? '-').toString();
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: cs.secondaryContainer,
-                  foregroundColor: cs.onSecondaryContainer,
-                  child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'C'),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Welcome, $name', style: Theme.of(context).textTheme.titleLarge),
-                      const SizedBox(height: 6),
-                      Text('Phone: $phone'),
-                      Text('City: $city'),
-                    ],
+  Widget _buildHeroHeader(String name, bool isOnShift, ColorScheme cs, TextTheme tt) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: cs.primary,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [BoxShadow(color: cs.primary.withOpacity(0.2), blurRadius: 20, offset: const Offset(0, 10))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              CircleAvatar(
+                radius: 30,
+                backgroundColor: cs.onPrimary.withOpacity(0.2),
+                child: Text(name.isNotEmpty ? name[0].toUpperCase() : '?', 
+                  style: TextStyle(color: cs.onPrimary, fontSize: 24, fontWeight: FontWeight.bold)),
+              ),
+              _StatusPill(isOnShift: isOnShift),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text('Welcome back,', style: TextStyle(color: cs.onPrimary.withOpacity(0.7), fontSize: 16)),
+          Text(name, style: TextStyle(color: cs.onPrimary, fontSize: 28, fontWeight: FontWeight.bold)),
+          if (isOnShift) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.location_on, color: Colors.greenAccent, size: 16),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Active at: ${_activeShift!['home_name'] ?? 'Assigned Home'}", 
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500)
                   ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: cs.outlineVariant),
-                      ),
-                      child: Text(status, style: Theme.of(context).textTheme.bodySmall),
-                    ),
-                    const SizedBox(height: 10),
-                    OutlinedButton.icon(
-                      onPressed: _openEditProfile,
-                      icon: const Icon(Icons.edit, size: 18),
-                      label: const Text('Edit'),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ),
-        const SizedBox(height: 12),
+          ]
+        ],
+      ),
+    );
+  }
 
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Quick actions', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
-                  children: [
-                    _ActionChip(icon: Icons.people, label: 'Assigned Elders', onTap: () => _goTab(1)),
-                    _ActionChip(icon: Icons.notifications, label: 'Alerts', onTap: () => _goTab(2)),
-                    _ActionChip(icon: Icons.event, label: 'Upcoming Visits', onTap: () => _goTab(3)),
-                    _ActionChip(icon: Icons.schedule, label: 'Shifts', onTap: () => _goTab(5)),
-                  ],
-                ),
-              ],
-            ),
-          ),
+  Widget _buildMetricsRow(ColorScheme cs, TextTheme tt) {
+    return Row(
+      children: [
+        _MetricCard(
+          label: "Total Completed", 
+          value: "$_totalCompletedShifts Shifts", 
+          icon: Icons.task_alt_rounded, 
+          color: cs.primary
+        ),
+        const SizedBox(width: 12),
+        _MetricCard(
+          label: "Total Earnings", 
+          value: "\$${_totalRevenue.toStringAsFixed(2)}", 
+          icon: Icons.account_balance_wallet, 
+          color: Colors.green
         ),
       ],
     );
   }
+
+  Widget _buildErrorState(ColorScheme cs, TextTheme tt) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.sync_problem_rounded, size: 64, color: cs.error),
+          const SizedBox(height: 16),
+          const Text("Dashboard sync failed."),
+          TextButton(onPressed: _load, child: const Text("Retry Connection")),
+        ],
+      ),
+    );
+  }
 }
 
-class _ActionChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
+// --- Supporting UI Components ---
 
-  const _ActionChip({required this.icon, required this.label, required this.onTap});
-
+class _StatusPill extends StatelessWidget {
+  final bool isOnShift;
+  const _StatusPill({required this.isOnShift});
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: onTap,
+    final color = isOnShift ? Colors.greenAccent : Colors.white.withOpacity(0.2);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
+      child: Text(
+        isOnShift ? "ON SHIFT" : "OFF DUTY", 
+        style: TextStyle(
+          color: isOnShift ? Colors.black87 : Colors.white, 
+          fontSize: 10, 
+          fontWeight: FontWeight.bold, 
+          letterSpacing: 1
+        )
+      ),
+    );
+  }
+}
+
+class _MetricCard extends StatelessWidget {
+  final String label, value; final IconData icon; final Color color;
+  const _MetricCard({required this.label, required this.value, required this.icon, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: cs.outlineVariant),
+          color: color.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: color.withOpacity(0.15)),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 18),
-            const SizedBox(width: 8),
-            Text(label),
+            Icon(icon, color: color, size: 20),
+            const SizedBox(height: 12),
+            Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
+            Text(label, style: TextStyle(fontSize: 11, color: color.withOpacity(0.8))),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _NavTile extends StatelessWidget {
+  final IconData icon; final String label; final Color color; final VoidCallback onTap;
+  const _NavTile({required this.icon, required this.label, required this.color, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        decoration: BoxDecoration(color: color.withOpacity(0.08), borderRadius: BorderRadius.circular(24)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+              child: Icon(icon, color: color, size: 28),
+            ),
+            const SizedBox(height: 12),
+            Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: color.withOpacity(0.9))),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FullWidthAction extends StatelessWidget {
+  final IconData icon; final String label; final VoidCallback onTap; final ColorScheme cs;
+  const _FullWidthAction({required this.icon, required this.label, required this.onTap, required this.cs});
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      tileColor: cs.surfaceVariant.withOpacity(0.3),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      leading: Icon(icon, color: cs.primary),
+      title: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+      trailing: const Icon(Icons.chevron_right_rounded),
     );
   }
 }
