@@ -64,19 +64,34 @@ exports.updateProfile = (req, res) => {
 // -------------------- 2) assigned elders --------------------
 exports.getAssignedElders = (req, res) => {
   db.query(
-    `SELECT e.elder_id, e.name, e.age, e.gender, e.home_id, e.location, e.last_check_in,
-            ea.home_id AS assignment_home_id, ea.assigned_at
+    `SELECT 
+        ? AS caregiver_id,
+        e.elder_id,
+        e.name,
+        e.age,
+        e.gender,
+        e.home_id,
+        e.location,
+        e.last_check_in,
+        ea.home_id AS assignment_home_id,
+        ea.assigned_at,
+        ef.family_id
      FROM elder_assignments ea
      JOIN elders e ON e.elder_id = ea.elder_id
+     LEFT JOIN elder_family ef ON ef.elder_id = e.elder_id
      WHERE ea.caregiver_id = ?
      ORDER BY ea.assigned_at DESC`,
-    [req.user.id],
+    [req.user.id, req.user.id],
     (err, rows) => {
       if (err) return res.status(500).json({ msg: "Error fetching assigned elders", err });
       res.status(200).json({ elders: rows });
     }
   );
 };
+
+
+
+
 
 exports.getElderDetails = (req, res) => {
   const elderId = req.params.elder_id;
@@ -488,6 +503,62 @@ exports.getElderLocationHistory = (req, res) => {
 };
 
 // -------------------- 8) shifts (INTERNAL ONLY) --------------------
+// -------------------- 8) shifts (INTERNAL + FREELANCE) --------------------
+
+exports.getMyActiveShift = async (req, res) => {
+  try {
+    const meta = await getCaregiverMeta(req.user.id);
+    if (!meta) return res.status(404).json({ msg: "Caregiver not found" });
+
+    const sql = `
+      SELECT cs.shift_id, cs.caregiver_id, cs.home_id,
+             rh.name AS home_name,
+             cs.shift_start, cs.shift_end, cs.notes, cs.created_at
+      FROM caregiver_shifts cs
+      LEFT JOIN retirement_homes rh ON rh.home_id = cs.home_id
+      WHERE cs.caregiver_id = ? AND cs.shift_end IS NULL
+      ORDER BY cs.shift_start DESC
+      LIMIT 1
+    `;
+
+    db.query(sql, [req.user.id], (err, rows) => {
+      if (err) return res.status(500).json({ msg: "Error fetching active shift", err });
+      res.status(200).json({ active_shift: rows[0] || null });
+    });
+  } catch (e) {
+    res.status(500).json({ msg: "Server error", error: e.message });
+  }
+};
+
+
+exports.getMyShiftHistory = async (req, res) => {
+  try {
+    const meta = await getCaregiverMeta(req.user.id);
+    if (!meta) return res.status(404).json({ msg: "Caregiver not found" });
+
+    const limit = Math.min(Number(req.query.limit || 30), 200);
+
+    const sql = `
+      SELECT cs.shift_id, cs.caregiver_id, cs.home_id,
+             rh.name AS home_name,
+             cs.shift_start, cs.shift_end, cs.notes, cs.created_at
+      FROM caregiver_shifts cs
+      LEFT JOIN retirement_homes rh ON rh.home_id = cs.home_id
+      WHERE cs.caregiver_id = ?
+      ORDER BY cs.shift_start DESC
+      LIMIT ${limit}
+    `;
+
+    db.query(sql, [req.user.id], (err, rows) => {
+      if (err) return res.status(500).json({ msg: "Error fetching shift history", err });
+      res.status(200).json({ shifts: rows });
+    });
+  } catch (e) {
+    res.status(500).json({ msg: "Server error", error: e.message });
+  }
+};
+
+
 exports.startMyShift = async (req, res) => {
   try {
     const caregiverId = req.user.id;
@@ -496,24 +567,31 @@ exports.startMyShift = async (req, res) => {
     const meta = await getCaregiverMeta(caregiverId);
     if (!meta) return res.status(404).json({ msg: "Caregiver not found" });
 
-    // internal-only (since caregiver_shifts.home_id is NOT NULL in schema)
-    if (meta.employment_type !== "internal" || !meta.home_id) {
-      return res.status(403).json({ msg: "Shift tracking is for internal (retirement-home) caregivers only" });
-    }
+    // ✅ allow both internal + freelance
+    const homeId = meta.home_id || null; // internal => number, freelance => null
 
+    // ✅ only one active shift per caregiver
     db.query(
-      "SELECT shift_id FROM caregiver_shifts WHERE caregiver_id = ? AND home_id = ? AND shift_end IS NULL",
-      [caregiverId, meta.home_id],
+      `SELECT shift_id
+       FROM caregiver_shifts
+       WHERE caregiver_id = ? AND shift_end IS NULL
+       LIMIT 1`,
+      [caregiverId],
       (err, active) => {
         if (err) return res.status(500).json({ msg: "Error checking active shift", err });
         if (active.length) return res.status(400).json({ msg: "You already have an active shift" });
 
         db.query(
-          "INSERT INTO caregiver_shifts (caregiver_id, home_id, shift_start, notes) VALUES (?, ?, NOW(), ?)",
-          [caregiverId, meta.home_id, notes],
+          `INSERT INTO caregiver_shifts (caregiver_id, home_id, shift_start, notes)
+           VALUES (?, ?, NOW(), ?)`,
+          [caregiverId, homeId, notes],
           (err2, result) => {
-            if (err2) return res.status(500).json({ msg: "Error starting shift", err2 });
-            res.status(201).json({ msg: "Shift started ✅", shift_id: result.insertId });
+            if (err2) return res.status(500).json({ msg: "Error starting shift", err: err2 });
+            res.status(201).json({
+              msg: "Shift started ✅",
+              shift_id: result.insertId,
+              home_id: homeId,
+            });
           }
         );
       }
@@ -531,19 +609,31 @@ exports.endMyShift = async (req, res) => {
     const meta = await getCaregiverMeta(caregiverId);
     if (!meta) return res.status(404).json({ msg: "Caregiver not found" });
 
-    if (meta.employment_type !== "internal" || !meta.home_id) {
-      return res.status(403).json({ msg: "Shift tracking is for internal (retirement-home) caregivers only" });
-    }
-
+    // ✅ find the active shift first, then close it
     db.query(
-      `UPDATE caregiver_shifts
-       SET shift_end = NOW(), notes = ?
-       WHERE caregiver_id = ? AND home_id = ? AND shift_end IS NULL`,
-       [notes, caregiverId, meta.home_id],
-       (err, result) => {
-        if (err) return res.status(500).json({ msg: "Error ending shift", err });
-        if (!result.affectedRows) return res.status(400).json({ msg: "No active shift found" });
-        res.status(200).json({ msg: "Shift ended ✅" });
+      `SELECT shift_id
+       FROM caregiver_shifts
+       WHERE caregiver_id = ? AND shift_end IS NULL
+       ORDER BY shift_start DESC
+       LIMIT 1`,
+      [caregiverId],
+      (err, rows) => {
+        if (err) return res.status(500).json({ msg: "Error finding active shift", err });
+        if (!rows.length) return res.status(400).json({ msg: "No active shift found" });
+
+        const shiftId = rows[0].shift_id;
+
+        db.query(
+          `UPDATE caregiver_shifts
+           SET shift_end = NOW(),
+               notes = COALESCE(?, notes)
+           WHERE shift_id = ?`,
+          [notes, shiftId],
+          (err2, result) => {
+            if (err2) return res.status(500).json({ msg: "Error ending shift", err: err2 });
+            res.status(200).json({ msg: "Shift ended ✅", shift_id: shiftId });
+          }
+        );
       }
     );
   } catch (e) {
@@ -551,59 +641,6 @@ exports.endMyShift = async (req, res) => {
   }
 };
 
-exports.getMyActiveShift = async (req, res) => {
-  try {
-    const meta = await getCaregiverMeta(req.user.id);
-    if (!meta) return res.status(404).json({ msg: "Caregiver not found" });
-
-    if (meta.employment_type !== "internal" || !meta.home_id) {
-      return res.status(200).json({ active_shift: null, note: "Freelance caregivers have no shift tracking" });
-    }
-
-    db.query(
-      `SELECT shift_id, home_id, shift_start, shift_end, notes
-       FROM caregiver_shifts
-       WHERE caregiver_id = ? AND home_id = ? AND shift_end IS NULL
-       ORDER BY shift_start DESC
-       LIMIT 1`,
-      [req.user.id, meta.home_id],
-      (err, rows) => {
-        if (err) return res.status(500).json({ msg: "Error fetching active shift", err });
-        res.status(200).json({ active_shift: rows[0] || null });
-      }
-    );
-  } catch (e) {
-    res.status(500).json({ msg: "Server error", error: e.message });
-  }
-};
-
-exports.getMyShiftHistory = async (req, res) => {
-  try {
-    const meta = await getCaregiverMeta(req.user.id);
-    if (!meta) return res.status(404).json({ msg: "Caregiver not found" });
-
-    if (meta.employment_type !== "internal" || !meta.home_id) {
-      return res.status(200).json({ shifts: [], note: "Freelance caregivers have no shift tracking" });
-    }
-
-    const limit = Math.min(Number(req.query.limit || 30), 200);
-
-    db.query(
-      `SELECT shift_id, home_id, shift_start, shift_end, notes, created_at
-       FROM caregiver_shifts
-       WHERE caregiver_id = ? AND home_id = ?
-       ORDER BY shift_start DESC
-       LIMIT ?`,
-      [req.user.id, meta.home_id, limit],
-      (err, rows) => {
-        if (err) return res.status(500).json({ msg: "Error fetching shift history", err });
-        res.status(200).json({ shifts: rows });
-      }
-    );
-  } catch (e) {
-    res.status(500).json({ msg: "Server error", error: e.message });
-  }
-};
 //status
 exports.getElderStatus = (req, res) => {
   const elderId = req.params.elder_id;
@@ -647,33 +684,43 @@ exports.getElderStatus = (req, res) => {
   });
 };
 //alerts 
-exports.getMyAlerts = (req, res) => {
-  const caregiverId = req.user.id;
+// caregiver.controller.js
+// caregiver.controller.js
+exports.getMyAlerts = async (req, res) => {
+  try {
+    const caregiverId = req.user.id;
 
-  const sql = `
-    SELECT
-      n.id, n.type, n.message, n.severity, n.status, n.created_at,
-      n.user_id AS elder_id,
-      e.name AS elder_name
-    FROM admin_notifications n
-    JOIN elder_assignments ea
-      ON ea.elder_id = n.user_id
-     AND ea.caregiver_id = ?
-    LEFT JOIN elders e ON e.elder_id = n.user_id
-    WHERE n.status = 'open'
-      AND (n.type IN ('health_alert','alert','emergency') OR n.type = '')
-    ORDER BY n.created_at DESC
-    LIMIT 200
-  `;
+    const sql = `
+      SELECT
+        n.id,
+        n.type,
+        n.message,
+        n.elder_id,
+        e.name AS elder_name,
+        n.sender_id,
+        n.sender_role,
+        n.created_at,
+        n.is_read,
+        n.status,
+        n.severity
+      FROM admin_notifications n
+      JOIN elders e ON e.elder_id = n.elder_id
+      JOIN elder_caregiver_assignments a
+        ON a.elder_id = n.elder_id AND a.caregiver_id = ?
+      WHERE n.status = 'open'
+      ORDER BY n.created_at DESC
+    `;
 
-  db.query(sql, [caregiverId], (err, rows) => {
-    if (err) {
-      console.error("Error fetching caregiver alerts:", err);
-      return res.status(500).json({ msg: "Error fetching alerts", err });
-    }
-    res.status(200).json({ msg: "Alerts retrieved ✅", alerts: rows });
-  });
+    db.query(sql, [caregiverId], (err, rows) => {
+      if (err) return res.status(500).json({ msg: "Error fetching alerts", err });
+      res.status(200).json({ alerts: rows });
+    });
+  } catch (e) {
+    res.status(500).json({ msg: "Server error", error: e.message });
+  }
 };
+
+
 
 exports.getElderAlerts = (req, res) => {
   const elderId = Number(req.params.elder_id);

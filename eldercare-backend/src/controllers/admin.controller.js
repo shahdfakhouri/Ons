@@ -263,21 +263,28 @@ exports.getFamilyMatches = (req, res) => {
   const { family_id } = req.params;
 
   const sql = `
-    SELECT m.match_id, m.family_id, m.matched_id, m.matched_role, m.score,
-           m.selected_by_family, m.approved_by_admin, m.status,
-           CASE
-             WHEN m.matched_role = 'caregiver' THEN c.name
-             WHEN m.matched_role = 'retirement_home' THEN r.name
-           END AS matched_name,
-           CASE
-             WHEN m.matched_role = 'caregiver' THEN c.city
-             WHEN m.matched_role = 'retirement_home' THEN r.city
-           END AS city
-    FROM matches m
-    LEFT JOIN caregivers c ON m.matched_id = c.caregiver_id AND m.matched_role = 'caregiver'
-    LEFT JOIN retirement_homes r ON m.matched_id = r.home_id AND m.matched_role = 'retirement_home'
-    WHERE m.family_id = ?;
-  `;
+  SELECT
+    m.match_id, m.family_id, m.matched_id, m.matched_role, m.score,
+    m.selected_by_family, m.approved_by_admin, m.status, m.created_at,
+    COALESCE(
+      CASE WHEN m.matched_role='caregiver' THEN c.name END,
+      CASE WHEN m.matched_role='retirement_home' THEN r.name END,
+      'Unknown'
+    ) AS matched_name,
+    COALESCE(
+      CASE WHEN m.matched_role='caregiver' THEN c.city END,
+      CASE WHEN m.matched_role='retirement_home' THEN r.city END,
+      '-'
+    ) AS city
+  FROM matches m
+  LEFT JOIN caregivers c
+    ON m.matched_role='caregiver' AND m.matched_id = c.caregiver_id
+  LEFT JOIN retirement_homes r
+    ON m.matched_role='retirement_home' AND m.matched_id = r.home_id
+  WHERE m.family_id = ?
+  ORDER BY m.created_at DESC;
+`;
+
 
   db.query(sql, [family_id], (err, results) => {
     if (err) return res.status(500).json({ msg: "DB error fetching matches", err });
@@ -336,20 +343,102 @@ exports.rejectMatch = (req, res) => {
     res.status(200).json({ msg: "Match rejected successfully" });
   });
 };
-//👥 See all active users
+// 👥 See all active users (Updated to include Elders and Employment Type)
 exports.getActiveUsers = (req, res) => {
   const sql = `
-    SELECT 'caregiver' AS role, name, email, phone, status FROM caregivers
-    UNION
-    SELECT 'retirement_home' AS role, name, contact_email, contact_phone, 'active' AS status FROM retirement_homes
-    UNION
-    SELECT 'family' AS role, name, email, phone, 'active' AS status FROM family_members
+    -- 1. Caregivers (Includes employment_type)
+    SELECT 
+      'caregiver' AS role, 
+      name, 
+      email, 
+      phone, 
+      status, 
+      employment_type 
+    FROM caregivers
+    
+    UNION ALL
+    
+    -- 2. Retirement Homes (employment_type is NULL)
+    SELECT 
+      'retirement_home' AS role, 
+      name, 
+      contact_email AS email, 
+      contact_phone AS phone, 
+      'active' AS status, 
+      NULL AS employment_type 
+    FROM retirement_homes
+    
+    UNION ALL
+    
+    -- 3. Family Members (employment_type is NULL)
+    SELECT 
+      'family' AS role, 
+      name, 
+      email, 
+      phone, 
+      'active' AS status, 
+      NULL AS employment_type 
+    FROM family_members
+    
+    UNION ALL
+    
+    -- 4. 🛠️ NEW: Elders (Completes the total to 55)
+    SELECT 
+      'elder' AS role, 
+      name, 
+      NULL AS email, 
+      NULL AS phone, 
+      'active' AS status, 
+      NULL AS employment_type 
+    FROM elders
   `;
+
   db.query(sql, (err, results) => {
-    if (err) return res.status(500).json({ msg: "DB error fetching active users", err });
+    if (err) {
+      console.error("❌ SQL Error:", err);
+      return res.status(500).json({ msg: "DB error fetching active users", err });
+    }
     res.status(200).json({ msg: "Active users retrieved", users: results });
   });
 };
+
+// Admin: list all matches selected by families
+exports.getSelectedMatches = (req, res) => {
+  const sql = `
+    SELECT 
+      m.match_id, 
+      m.matched_role, 
+      m.score,
+      m.selected_by_family, 
+      m.approved_by_admin, 
+      m.status, 
+      m.created_at,
+      f.name AS family_name,
+      CASE
+        WHEN m.matched_role='caregiver' THEN c.name
+        WHEN m.matched_role='retirement_home' THEN r.name
+      END AS matched_name,
+      CASE
+        WHEN m.matched_role='caregiver' THEN c.city
+        WHEN m.matched_role='retirement_home' THEN r.city
+      END AS city
+    FROM matches m
+    LEFT JOIN family_members f ON f.family_id = m.family_id
+    LEFT JOIN caregivers c ON m.matched_id = c.caregiver_id AND m.matched_role='caregiver'
+    LEFT JOIN retirement_homes r ON m.matched_id = r.home_id AND m.matched_role='retirement_home'
+    WHERE m.selected_by_family = 1
+    ORDER BY m.created_at DESC;
+  `;
+
+  db.query(sql, (err, rows) => {
+    if (err) return res.status(500).json({ msg: "DB error", err });
+    res.status(200).json({ matches: rows });
+  });
+};
+
+
+
+
 
 //🔐 Manage roles / account status
 exports.updateUserRoleOrStatus = (req, res) => {
@@ -369,11 +458,15 @@ exports.updateUserRoleOrStatus = (req, res) => {
   });
 };
 
-//🧓 Elders & Assigned Caregivers
+// src/controllers/admin.controller.js
+
+// 🧓 Elders & Assigned Caregivers (Updated for Filtering)
 exports.getElderAssignments = (req, res) => {
   const sql = `
     SELECT e.elder_id, e.name AS elder_name, 
            c.name AS caregiver_name, c.status AS caregiver_status,
+           -- 🛠️ ADDED THIS LINE: Fetches the staff type
+           c.employment_type, 
            r.name AS home_name,
            ea.assigned_at
     FROM elder_assignments ea
@@ -388,30 +481,34 @@ exports.getElderAssignments = (req, res) => {
   });
 };
 
-//🕒 Last check-in & health summary
-// src/controllers/admin.controller.js
-// src/controllers/admin.controller.js
 
-// src/controllers/admin.controller.js
 
-// src/controllers/admin.controller.js
+
 
 exports.getElderHealthSummary = (req, res) => {
   const sql = `
     SELECT 
       e.elder_id, 
       e.name AS elder_name,
-      -- Use the column you showed in your screenshot!
       e.last_check_in AS last_checkin, 
       hl.blood_pressure, 
       hl.blood_sugar, 
       hl.temperature, 
       hl.notes, 
-      hl.date
+      hl.date,
+      -- 🛠️ ADD THIS LINE: Counts total logs for this elder
+      (SELECT COUNT(*) FROM health_logs WHERE elder_id = e.elder_id) AS logs_count,
+      -- 🛠️ ADD THIS LINE: Ensures employment_type is available for the staff filter
+      c.employment_type,
+      c.name AS caregiver_name,
+      r.name AS home_name
     FROM elders e
-    -- JOIN with health_logs to get the most recent vitals
     LEFT JOIN health_logs hl ON hl.elder_id = e.elder_id 
       AND hl.log_id = (SELECT MAX(log_id) FROM health_logs WHERE elder_id = e.elder_id)
+    -- 🛠️ JOINs to ensure staff/home filters work correctly
+    LEFT JOIN elder_assignments ea ON e.elder_id = ea.elder_id
+    LEFT JOIN caregivers c ON ea.caregiver_id = c.caregiver_id
+    LEFT JOIN retirement_homes r ON ea.home_id = r.home_id
     ORDER BY e.name ASC;
   `;
 
@@ -704,47 +801,53 @@ exports.getAdminAnalytics = (req, res) => {
       totalUsersByRole: `
         SELECT 'caregiver' AS role, COUNT(*) AS count FROM caregivers
         UNION ALL
-        SELECT 'retirement_home', COUNT(*) FROM retirement_homes
+        SELECT 'retirement_home' AS role, COUNT(*) AS count FROM retirement_homes
         UNION ALL
-        SELECT 'family', COUNT(*) FROM family_members
+        SELECT 'family' AS role, COUNT(*) AS count FROM family_members
         UNION ALL
-        SELECT 'elder', COUNT(*) FROM elders;
+        SELECT 'elder' AS role, COUNT(*) AS count FROM elders;
       `,
       activeCaregivers: `
-        SELECT COUNT(*) AS active_caregivers FROM caregivers WHERE status = 'active';
+        SELECT COUNT(*) AS active_caregivers
+        FROM caregivers
+        WHERE status IN ('active', 'available');
       `,
       pendingApprovals: `
-        SELECT 
+        SELECT
           (SELECT COUNT(*) FROM caregivers WHERE is_approved = 0) +
           (SELECT COUNT(*) FROM retirement_homes WHERE is_approved = 0)
           AS pending_approvals;
       `,
       elderAssignments: `
-        SELECT 
-          (SELECT COUNT(*) FROM elder_assignments) AS assigned,
-          (SELECT COUNT(*) FROM elders) - (SELECT COUNT(*) FROM elder_assignments) AS unassigned;
-      `,
-      averageHealthMetrics: `
-        SELECT 
-          ROUND(AVG(SUBSTRING_INDEX(blood_pressure, '/', 1))) AS avg_systolic,
-          ROUND(AVG(SUBSTRING_INDEX(blood_pressure, '/', -1))) AS avg_diastolic,
-          ROUND(AVG(CAST(REPLACE(blood_sugar, ' mg/dL', '') AS DECIMAL(5,2)))) AS avg_blood_sugar,
-          ROUND(AVG(CAST(REPLACE(temperature, '°C', '') AS DECIMAL(4,2))), 1) AS avg_temperature
-        FROM health_logs;
+        SELECT
+          (SELECT COUNT(DISTINCT elder_id) FROM elder_assignments) AS assigned,
+          (SELECT COUNT(*) FROM elders
+            WHERE elder_id NOT IN (SELECT DISTINCT elder_id FROM elder_assignments)
+          ) AS unassigned;
       `,
       weeklyReportsCount: `
         SELECT COUNT(*) AS weekly_reports FROM weekly_reports;
+      `,
+      averageHealthMetrics: `
+        SELECT
+          ROUND(AVG(NULLIF(SUBSTRING_INDEX(blood_pressure, '/', 1), ''))) AS avg_systolic,
+          ROUND(AVG(NULLIF(REPLACE(blood_sugar, ' mg/dL', ''), ''))) AS avg_blood_sugar,
+          ROUND(AVG(NULLIF(REPLACE(temperature, '°C', ''), '')), 1) AS avg_temperature
+        FROM health_logs;
       `
     };
 
     const results = {};
 
-    // Execute all queries in parallel
     const promises = Object.entries(queries).map(([key, sql]) => {
       return new Promise((resolve, reject) => {
         db.query(sql, (err, rows) => {
           if (err) return reject(err);
-          results[key] = rows;
+
+          // normalize: arrays for grouped results, single object for single-row results
+          if (key === "totalUsersByRole") results[key] = rows;
+          else results[key] = rows[0] || {};
+
           resolve();
         });
       });
@@ -767,6 +870,13 @@ exports.getAdminAnalytics = (req, res) => {
     res.status(500).json({ msg: "Server error", error });
   }
 };
+
+
+
+
+
+
+
 //helth alerts
 exports.getHealthAlerts = (req, res) => {
   const sql = `
@@ -857,6 +967,9 @@ exports.getElderLocationHistory = (req, res) => {
     });
   });
 };
+
+
+
 exports.getAdminOverview = (req, res) => {
   const data = {
     users: {},

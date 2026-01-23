@@ -33,7 +33,7 @@
     "path": "^0.12.7",
     "pdf-parse-fixed": "^1.1.1",
     "pdfkit": "^0.17.2",
-    "socket.io": "^4.8.1",
+    "socket.io": "^4.8.3",
     "twilio": "^5.10.5"
   }
 }

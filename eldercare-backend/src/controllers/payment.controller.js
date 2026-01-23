@@ -194,16 +194,53 @@ exports.getReceiverRevenue = (req, res) => {
   });
 };
 
-// 🟣 Caregiver/Retirement Home: Receiver transactions list
+// 🟣 Caregiver/Retirement Home: Receiver transactions list (WITH SENDER NAMES)
 exports.getReceiverTransactions = (req, res) => {
   const receiverId = req.user.id;
   const receiverRole = req.user.role;
 
+  const limit = Math.min(parseInt(req.query.limit || "50", 10) || 50, 200);
+
   const sql = `
-    SELECT *
-    FROM transactions
-    WHERE to_role = ? AND to_id = ?
-    ORDER BY transaction_id DESC
+    SELECT
+      t.transaction_id,
+      t.payment_id,
+      t.from_role,
+      t.from_id,
+      t.to_role,
+      t.to_id,
+      t.amount,
+      t.type,
+      t.created_at,
+
+      -- Sender name (who paid)
+      COALESCE(
+        CASE WHEN t.from_role = 'family' THEN fm.name END,
+        CASE WHEN t.from_role = 'caregiver' THEN cg.name END,
+        CASE WHEN t.from_role = 'retirement_home' THEN rh.name END,
+        CASE WHEN t.from_role = 'system' THEN 'Platform' END,
+        CONCAT(t.from_role, ' #', t.from_id)
+      ) AS from_name,
+
+      -- Optional: receiver name (who receives)
+      COALESCE(
+        CASE WHEN t.to_role = 'caregiver' THEN cg2.name END,
+        CASE WHEN t.to_role = 'retirement_home' THEN rh2.name END,
+        CASE WHEN t.to_role = 'system' THEN 'Platform' END,
+        CONCAT(t.to_role, ' #', t.to_id)
+      ) AS to_name
+
+    FROM transactions t
+    LEFT JOIN family_members fm ON t.from_role = 'family' AND fm.family_id = t.from_id
+    LEFT JOIN caregivers cg     ON t.from_role = 'caregiver' AND cg.caregiver_id = t.from_id
+    LEFT JOIN retirement_homes rh ON t.from_role = 'retirement_home' AND rh.home_id = t.from_id
+
+    LEFT JOIN caregivers cg2     ON t.to_role = 'caregiver' AND cg2.caregiver_id = t.to_id
+    LEFT JOIN retirement_homes rh2 ON t.to_role = 'retirement_home' AND rh2.home_id = t.to_id
+
+    WHERE t.to_role = ? AND t.to_id = ?
+    ORDER BY t.transaction_id DESC
+    LIMIT ${limit};
   `;
 
   db.query(sql, [receiverRole, receiverId], (err, rows) => {
@@ -211,3 +248,4 @@ exports.getReceiverTransactions = (req, res) => {
     res.status(200).json({ transactions: rows });
   });
 };
+

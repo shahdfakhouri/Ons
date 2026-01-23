@@ -56,6 +56,8 @@ router.get("/matches/:family_id", verifyToken, isAdmin, adminController.getFamil
 // Approve or reject a selected match
 router.post("/matches/:match_id/approve", verifyToken, isAdmin, adminController.approveMatch);
 router.post("/matches/:match_id/reject", verifyToken, isAdmin, adminController.rejectMatch);
+router.get("/matches-selected", verifyToken, isAdmin, adminController.getSelectedMatches);
+
 
 // 💰 Financial Dashboard
 router.get("/dashboard/overview", verifyToken, isAdmin, adminController.getFinancialOverview);
@@ -86,6 +88,8 @@ router.get("/gps/history/:elder_id", verifyToken, isAdmin, adminController.getEl
 router.get("/gps/distance/:elder_id/:caregiver_id", verifyToken, isAdmin, trackerController.getDistanceToCaregiver);
 
 router.get("/caregivers/:id/cv", adminController.viewCaregiverCV);
+
+
 
 
 
