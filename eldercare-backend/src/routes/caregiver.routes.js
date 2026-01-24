@@ -78,4 +78,12 @@ router.patch("/chats/:conversation_id/read", caregiverController.markChatRead);
 router.post("/me/cv", verifyToken, upload.single("cv"), caregiverController.uploadMyCV);
 
 
+// Emergency Requests for a specific elder (Alerts tab)
+router.get("/elders/:elder_id/emergency-requests", ensureAssignedToElder, caregiverController.getElderEmergencyRequests);
+
+// Update emergency status (accept/resolve/close)
+router.patch("/emergency-requests/:emergency_id/status", caregiverController.updateEmergencyRequestStatus);
+
+
+
 module.exports = router;

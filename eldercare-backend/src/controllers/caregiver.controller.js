@@ -726,11 +726,18 @@ exports.getElderAlerts = (req, res) => {
   const elderId = Number(req.params.elder_id);
 
   const sql = `
-    SELECT id, type, message, severity, status, created_at
+    SELECT
+      notification_id AS id,
+      type,
+      message,
+      severity,
+      status,
+      created_at,
+      sender_role,
+      sender_id
     FROM admin_notifications
-    WHERE user_id = ?
+    WHERE elder_id = ?
       AND status = 'open'
-      AND (type IN ('health_alert','alert','emergency') OR type = '')
     ORDER BY created_at DESC
     LIMIT 200
   `;
@@ -743,6 +750,7 @@ exports.getElderAlerts = (req, res) => {
     res.status(200).json({ msg: "Elder alerts retrieved ✅", alerts: rows });
   });
 };
+
 //9 visits 
 //Upcoming visits for ALL assigned elders
 exports.getMyUpcomingVisits = (req, res) => {
@@ -1062,6 +1070,47 @@ exports.uploadMyCV = (req, res) => {
         cv_path: cvUrl,
         cv_original_name: original,
       });
+    }
+  );
+};
+
+
+exports.getElderEmergencyRequests = (req, res) => {
+  const elderId = req.params.elder_id;
+
+  db.query(
+    `SELECT emergency_id, elder_id, family_id, triggered_by_role, triggered_by_id,
+            emergency_type, severity, latitude, longitude, status, created_at, updated_at, resolved_at
+     FROM emergency_requests
+     WHERE elder_id = ?
+     ORDER BY created_at DESC`,
+    [elderId],
+    (err, rows) => {
+      if (err) return res.status(500).json({ msg: "Error fetching emergency requests", err });
+      res.status(200).json({ emergencies: rows });
+    }
+  );
+};
+  
+exports.updateEmergencyRequestStatus = (req, res) => {
+  const emergencyId = Number(req.params.emergency_id);
+  const { status } = req.body || {};
+
+  const allowed = ["open", "accepted", "resolved", "closed"];
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ msg: `Invalid status. Allowed: ${allowed.join(", ")}` });
+  }
+
+  db.query(
+    `UPDATE emergency_requests
+     SET status = ?, updated_at = NOW(),
+         resolved_at = CASE WHEN ? IN ('resolved','closed') THEN NOW() ELSE resolved_at END
+     WHERE emergency_id = ?`,
+    [status, status, emergencyId],
+    (err, result) => {
+      if (err) return res.status(500).json({ msg: "Error updating emergency request", err });
+      if (result.affectedRows === 0) return res.status(404).json({ msg: "Emergency request not found" });
+      res.status(200).json({ msg: "Emergency status updated ✅" });
     }
   );
 };

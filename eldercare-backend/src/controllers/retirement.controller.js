@@ -6,9 +6,9 @@ exports.getDashboard = (req, res) => {
 
   const queries = {
   homeInfo: "SELECT name, city, monthly_cost, services, contact_email, contact_phone FROM retirement_homes WHERE home_id = ?",
-  totalElders: "SELECT COUNT(*) AS total_elders FROM elder_assignments WHERE home_id = ?",
-  totalCaregivers: "SELECT COUNT(*) AS total_caregivers FROM home_caregivers WHERE home_id = ?",
-  
+totalElders: "SELECT COUNT(*) AS total_elders FROM elders WHERE home_id = ?",
+  // New query looking at the actual caregivers table shown in your screenshot
+totalCaregivers: "SELECT COUNT(*) AS total_caregivers FROM caregivers WHERE home_id = ?",  
   // ✅ FIXED QUERY
   pendingPayments: `
     SELECT COUNT(*) AS pending_payments 
@@ -19,15 +19,16 @@ exports.getDashboard = (req, res) => {
   `,
   
   avgHealth: `
-    SELECT 
-      AVG(CAST(SUBSTRING_INDEX(blood_sugar, ' ', 1) AS DECIMAL(10,2))) AS avg_blood_sugar,
-      AVG(CAST(SUBSTRING_INDEX(REPLACE(blood_pressure, '/','.'), ' ', 1) AS DECIMAL(10,2))) AS avg_blood_pressure,
-      AVG(CAST(REPLACE(temperature, '°C','') AS DECIMAL(10,2))) AS avg_temp
-    FROM health_logs hl
-    JOIN elders e ON hl.elder_id = e.elder_id
-    JOIN elder_assignments ea ON e.elder_id = ea.elder_id
-    WHERE ea.home_id = ?
-  `
+  SELECT 
+    -- Improved parsing to handle different string formats
+    AVG(CAST(NULLIF(SUBSTRING_INDEX(blood_sugar, ' ', 1), '') AS DECIMAL(10,2))) AS avg_blood_sugar,
+    AVG(CAST(NULLIF(SUBSTRING_INDEX(REPLACE(blood_pressure, '/','.'), ' ', 1), '') AS DECIMAL(10,2))) AS avg_blood_pressure,
+    AVG(CAST(NULLIF(REPLACE(REPLACE(temperature, '°C',''), ' ', ''), '') AS DECIMAL(10,2))) AS avg_temp
+  FROM health_logs hl
+  JOIN elder_assignments ea ON hl.elder_id = ea.elder_id
+  WHERE ea.home_id = ?
+`
+
 };
 
 
@@ -76,18 +77,28 @@ exports.updateProfile = (req, res) => {
     res.status(200).json({ msg: "Profile updated successfully ✅" });
   });
 };
-// 🧑‍⚕️ Get all caregivers in this home
+// 🧑‍⚕️ Get only internal caregivers for this home
 exports.getHomeCaregivers = (req, res) => {
-  const homeId = req.user.id;
+  const homeId = req.user.id; // Ensure this is 21
   const sql = `
-    SELECT c.caregiver_id, c.name, c.email, c.phone, c.status, hc.assigned_at
-    FROM home_caregivers hc
-    JOIN caregivers c ON hc.caregiver_id = c.caregiver_id
-    WHERE hc.home_id = ?;
+    SELECT 
+      c.caregiver_id, 
+      c.name, 
+      c.email, 
+      c.phone, 
+      c.status,
+      c.employment_type,
+      -- Subquery to check active assignments in the elder_assignments table
+      (SELECT COUNT(*) FROM elder_assignments ea 
+       WHERE ea.caregiver_id = c.caregiver_id) AS assignment_count
+    FROM caregivers c
+    WHERE c.home_id = ? 
+    AND c.employment_type = 'internal';
   `;
+
   db.query(sql, [homeId], (err, results) => {
-    if (err) return res.status(500).json({ msg: "Error fetching caregivers", err });
-    res.status(200).json({ msg: "Caregivers retrieved successfully", caregivers: results });
+    if (err) return res.status(500).json({ msg: "Error fetching internal staff", err });
+    res.status(200).json({ caregivers: results });
   });
 };
 
@@ -152,10 +163,10 @@ exports.removeCaregiverFromHome = (req, res) => {
 // 🧭 Get all available caregivers (not assigned to any home)
 exports.getAvailableCaregivers = (req, res) => {
   const sql = `
-    SELECT c.caregiver_id, c.name, c.email, c.phone, c.status
-    FROM caregivers c
-    WHERE c.caregiver_id NOT IN (SELECT caregiver_id FROM home_caregivers)
-    AND c.is_approved = 1;
+    SELECT caregiver_id, name, email, phone, status, employment_type 
+    FROM caregivers 
+    WHERE caregiver_id NOT IN (SELECT caregiver_id FROM home_caregivers)
+    AND is_approved = 1;
   `;
   db.query(sql, (err, results) => {
     if (err) return res.status(500).json({ msg: "Error fetching available caregivers", err });
@@ -333,13 +344,13 @@ exports.getHomeEldersMonitoring = (req, res) => {
       el.latitude AS last_latitude,
       el.longitude AS last_longitude
 
-    FROM elder_assignments ea
-    JOIN elders e ON e.elder_id = ea.elder_id
+    FROM elders e -- ✅ Start with the elders table
+    LEFT JOIN elder_assignments ea ON e.elder_id = ea.elder_id -- ✅ Use LEFT JOIN
     LEFT JOIN caregivers c ON c.caregiver_id = ea.caregiver_id
 
     LEFT JOIN health_logs hl
       ON hl.elder_id = e.elder_id
-     AND hl.log_id = (
+      AND hl.log_id = (
         SELECT h2.log_id
         FROM health_logs h2
         WHERE h2.elder_id = e.elder_id
@@ -349,7 +360,7 @@ exports.getHomeEldersMonitoring = (req, res) => {
 
     LEFT JOIN elder_location el
       ON el.elder_id = e.elder_id
-     AND el.location_id = (
+      AND el.location_id = (
         SELECT l2.location_id
         FROM elder_location l2
         WHERE l2.elder_id = e.elder_id
@@ -357,7 +368,7 @@ exports.getHomeEldersMonitoring = (req, res) => {
         LIMIT 1
      )
 
-    WHERE ea.home_id = ?
+    WHERE e.home_id = ? -- ✅ Filter by home_id in the elders table
     ORDER BY el.recorded_at DESC, hl.date DESC;
   `;
 
@@ -532,32 +543,41 @@ exports.getHomeAlerts = (req, res) => {
 
   let sql = `
     SELECT
-      n.id, n.type, n.message, n.severity, n.status, n.is_read, n.user_id, n.created_at, n.resolved_at,
+      n.id,
+      n.type,
+      n.message,
+      n.severity,
+      n.status,
+      n.is_read,
+      n.elder_id,
+      n.created_at,
+      n.resolved_at,
       e.name AS elder_name
     FROM admin_notifications n
-    JOIN elder_assignments ea ON ea.elder_id = n.user_id AND ea.home_id = ?
-    JOIN elders e ON e.elder_id = ea.elder_id
-    WHERE 1 = 1
+    JOIN elder_assignments ea
+      ON ea.elder_id = n.elder_id
+     AND ea.home_id = ?
+    JOIN elders e ON e.elder_id = n.elder_id
+    WHERE 1=1
   `;
 
   const params = [homeId];
 
   if (status !== "all") {
-    sql += " AND n.status = ? ";
+    sql += ` AND n.status = ? `;
     params.push(status);
   }
 
-  sql += " ORDER BY n.created_at DESC LIMIT ? ";
+  sql += ` ORDER BY n.created_at DESC LIMIT ? `;
   params.push(limit);
 
   db.query(sql, params, (err, rows) => {
     if (err) return res.status(500).json({ msg: "Error fetching home alerts", err });
-    res.status(200).json({
-      msg: "Home alerts retrieved ✅",
-      alerts: rows,
-    });
+    res.status(200).json({ msg: "Home alerts retrieved ✅", alerts: rows });
   });
 };
+
+
 // ✅ PATCH /api/retirement/elders/:elder_id/check-in
 exports.checkInElder = async (req, res) => {
   const homeId = req.user.id;

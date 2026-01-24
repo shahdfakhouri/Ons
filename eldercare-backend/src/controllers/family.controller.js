@@ -5,7 +5,7 @@ const bcrypt = require("bcryptjs");
 // 1) Profile
 // --------------------
 exports.getDashboard = (req, res) => {
-  res.status(200).json({ msg: "Family dashboard working ✅", family_id: req.user.id });
+  res.status(200).json({ msg: "Family dashboard", family_id: req.user.id });
 };
 
 exports.getMyProfile = (req, res) => {
