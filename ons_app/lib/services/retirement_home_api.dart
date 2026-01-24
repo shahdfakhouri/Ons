@@ -83,11 +83,12 @@ class RetirementHomeApi {
   // =======================
   // EMERGENCIES
   // =======================
-  Future<List<Map<String, dynamic>>> getEmergencies() async {
-    final j = await get('/emergencies');
-    final list = (j['emergencies'] as List?) ?? (j['data'] as List?) ?? [];
-    return list.map((e) => Map<String, dynamic>.from(e)).toList();
-  }
+ Future<List<Map<String, dynamic>>> getEmergencies({String status = 'open'}) async {
+  final j = await get('/emergencies', queryParams: {'status': status});
+  final list = (j['emergencies'] as List?) ?? (j['data'] as List?) ?? [];
+  return list.map((e) => Map<String, dynamic>.from(e)).toList();
+}
+
 
   Future<void> acceptEmergency(int id) async => await patch('/emergencies/$id/accept');
   Future<void> rejectEmergency(int id) async => await patch('/emergencies/$id/reject');

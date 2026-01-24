@@ -12,9 +12,13 @@ class RetirementPaymentsPage extends StatefulWidget {
 class _RetirementPaymentsPageState extends State<RetirementPaymentsPage> {
   final _api = RetirementHomeApi();
 
+  static const _deepNavy = Color(0xFF313647);
+  static const _denim = Color(0xFF435663);
+  static const _sage = Color(0xFFA3B087);
+  static const _cream = Color(0xFFFFF8D4);
+
   bool _loading = true;
   String? _error;
-
   String _status = 'all';
   List<Map<String, dynamic>> _payments = [];
 
@@ -25,11 +29,7 @@ class _RetirementPaymentsPageState extends State<RetirementPaymentsPage> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
+    setState(() { _loading = true; _error = null; });
     try {
       final list = await _api.getPayments(status: _status);
       setState(() {
@@ -37,68 +37,121 @@ class _RetirementPaymentsPageState extends State<RetirementPaymentsPage> {
         _loading = false;
       });
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) return Center(child: Text(_error!));
+    if (_loading) return const Center(child: CircularProgressIndicator(color: _deepNavy));
+    if (_error != null) return Center(child: Text(_error!, style: const TextStyle(color: Colors.red)));
 
     return RefreshIndicator(
       onRefresh: _load,
+      color: _deepNavy,
       child: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(32),
         children: [
-          Row(
+          _buildHeader(),
+          const SizedBox(height: 32),
+          if (_payments.isEmpty)
+            _buildEmptyState("No financial records found for this home.")
+          else
+            ..._payments.map((p) => _buildPaymentBentoCard(p)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Financials', style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: _deepNavy, letterSpacing: -1)),
+            Text('Monitor revenue and family subscriptions', style: TextStyle(color: _denim, fontSize: 16)),
+          ],
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+          child: DropdownButton<String>(
+            value: _status,
+            underline: const SizedBox(),
+            items: const [
+              DropdownMenuItem(value: 'all', child: Text('All')),
+              DropdownMenuItem(value: 'pending', child: Text('Pending')),
+              DropdownMenuItem(value: 'paid', child: Text('Paid')),
+            ],
+            onChanged: (v) {
+              if (v == null) return;
+              setState(() => _status = v);
+              _load();
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPaymentBentoCard(Map<String, dynamic> p) {
+    final id = (p['payment_id'] ?? 0) as num;
+    final status = (p['status'] ?? 'pending').toString().toLowerCase();
+    final Color statusColor = status == 'paid' ? _sage : Colors.orangeAccent;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [BoxShadow(color: _deepNavy.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 8))],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(28),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => RetirementPaymentDetailsPage(paymentId: id.toInt())),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Row(
             children: [
-              Expanded(child: Text('Payments', style: Theme.of(context).textTheme.titleLarge)),
-              DropdownButton<String>(
-                value: _status,
-                items: const [
-                  DropdownMenuItem(value: 'all', child: Text('all')),
-                  DropdownMenuItem(value: 'pending', child: Text('pending')),
-                  DropdownMenuItem(value: 'paid', child: Text('paid')),
-                  DropdownMenuItem(value: 'failed', child: Text('failed')),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: statusColor.withOpacity(0.1), shape: BoxShape.circle),
+                child: Icon(Icons.account_balance_wallet_rounded, color: statusColor, size: 24),
+              ),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(p['family_name'] ?? 'Family Record', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _deepNavy)),
+                    Text(p['purpose'] ?? 'Subscription Fee', style: const TextStyle(color: _denim, fontSize: 13)),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('\$${p['amount']}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: _deepNavy)),
+                  Text(status.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: statusColor, letterSpacing: 0.5)),
                 ],
-                onChanged: (v) async {
-                  if (v == null) return;
-                  setState(() => _status = v);
-                  await _load();
-                },
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          if (_payments.isEmpty)
-            const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No payments found.')))
-          else
-            ..._payments.map((p) {
-              final id = (p['payment_id'] ?? 0) as num;
-              final family = (p['family_name'] ?? '—').toString();
-              final amount = (p['amount'] ?? '—').toString();
-              final status = (p['status'] ?? '—').toString();
-              final purpose = (p['purpose'] ?? '').toString();
-              final created = (p['created_at'] ?? '').toString();
-
-              return Card(
-                child: ListTile(
-                  title: Text('Payment #${id.toInt()} • $amount • $status'),
-                  subtitle: Text('Family: $family\nPurpose: $purpose\nCreated: $created'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => RetirementPaymentDetailsPage(paymentId: id.toInt())),
-                  ),
-                ),
-              );
-            }),
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildEmptyState(String msg) {
+    return Container(
+      padding: const EdgeInsets.all(48),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(32)),
+      child: Center(child: Text(msg, style: const TextStyle(color: _denim, fontStyle: FontStyle.italic))),
     );
   }
 }

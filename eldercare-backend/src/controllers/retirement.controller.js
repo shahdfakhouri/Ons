@@ -5,47 +5,54 @@ exports.getDashboard = (req, res) => {
   const homeId = req.user.id; // assuming JWT stores home_id
 
   const queries = {
-  homeInfo: "SELECT name, city, monthly_cost, services, contact_email, contact_phone FROM retirement_homes WHERE home_id = ?",
-totalElders: "SELECT COUNT(*) AS total_elders FROM elders WHERE home_id = ?",
-  // New query looking at the actual caregivers table shown in your screenshot
-totalCaregivers: "SELECT COUNT(*) AS total_caregivers FROM caregivers WHERE home_id = ?",  
-  // ✅ FIXED QUERY
-  pendingPayments: `
-    SELECT COUNT(*) AS pending_payments 
-    FROM payments 
-    WHERE target_type = 'retirement_home' 
-    AND target_id = ? 
-    AND status = 'pending'
-  `,
-  
-  avgHealth: `
-  SELECT 
-    -- Improved parsing to handle different string formats
-    AVG(CAST(NULLIF(SUBSTRING_INDEX(blood_sugar, ' ', 1), '') AS DECIMAL(10,2))) AS avg_blood_sugar,
-    AVG(CAST(NULLIF(SUBSTRING_INDEX(REPLACE(blood_pressure, '/','.'), ' ', 1), '') AS DECIMAL(10,2))) AS avg_blood_pressure,
-    AVG(CAST(NULLIF(REPLACE(REPLACE(temperature, '°C',''), ' ', ''), '') AS DECIMAL(10,2))) AS avg_temp
-  FROM health_logs hl
-  JOIN elder_assignments ea ON hl.elder_id = ea.elder_id
-  WHERE ea.home_id = ?
-`
+    homeInfo: "SELECT name, city, monthly_cost, services, contact_email, contact_phone FROM retirement_homes WHERE home_id = ?",
+    totalElders: "SELECT COUNT(*) AS total_elders FROM elders WHERE home_id = ?",
+    totalCaregivers: "SELECT COUNT(*) AS total_caregivers FROM caregivers WHERE home_id = ?",
+    
+    // ✅ NEW QUERY: Count open alerts for elders assigned to THIS home
+    totalAlerts: `
+      SELECT COUNT(*) AS total_alerts 
+      FROM admin_notifications n
+      JOIN elder_assignments ea ON ea.elder_id = n.elder_id
+      WHERE ea.home_id = ? AND n.status = 'open'
+    `,
 
-};
+    pendingPayments: `
+      SELECT COUNT(*) AS pending_payments 
+      FROM payments 
+      WHERE target_type = 'retirement_home' 
+      AND target_id = ? 
+      AND status = 'pending'
+    `,
+    
+    avgHealth: `
+      SELECT 
+        AVG(CAST(NULLIF(SUBSTRING_INDEX(blood_sugar, ' ', 1), '') AS DECIMAL(10,2))) AS avg_blood_sugar,
+        AVG(CAST(NULLIF(SUBSTRING_INDEX(REPLACE(blood_pressure, '/','.'), ' ', 1), '') AS DECIMAL(10,2))) AS avg_blood_pressure,
+        AVG(CAST(NULLIF(REPLACE(REPLACE(temperature, '°C',''), ' ', ''), '') AS DECIMAL(10,2))) AS avg_temp
+      FROM health_logs hl
+      JOIN elder_assignments ea ON hl.elder_id = ea.elder_id
+      WHERE ea.home_id = ?
+    `
+  };
 
-
+  // ✅ PROMISE.ALL: We added 'totalAlerts' to the list
   Promise.all([
     new Promise((resolve, reject) => db.query(queries.homeInfo, [homeId], (err, res) => err ? reject(err) : resolve(res[0]))),
     new Promise((resolve, reject) => db.query(queries.totalElders, [homeId], (err, res) => err ? reject(err) : resolve(res[0].total_elders))),
     new Promise((resolve, reject) => db.query(queries.totalCaregivers, [homeId], (err, res) => err ? reject(err) : resolve(res[0].total_caregivers))),
+    new Promise((resolve, reject) => db.query(queries.totalAlerts, [homeId], (err, res) => err ? reject(err) : resolve(res[0].total_alerts))),
     new Promise((resolve, reject) => db.query(queries.pendingPayments, [homeId], (err, res) => err ? reject(err) : resolve(res[0].pending_payments))),
     new Promise((resolve, reject) => db.query(queries.avgHealth, [homeId], (err, res) => err ? reject(err) : resolve(res[0])))
   ])
-    .then(([homeInfo, totalElders, totalCaregivers, pendingPayments, avgHealth]) => {
+    .then(([homeInfo, totalElders, totalCaregivers, totalAlerts, pendingPayments, avgHealth]) => {
       res.status(200).json({
         msg: "Retirement home dashboard loaded successfully ✅",
         homeInfo,
         stats: {
           totalElders,
           totalCaregivers,
+          totalAlerts, // ✅ This will now be sent to your Flutter Dashboard
           pendingPayments,
           avgHealth
         }

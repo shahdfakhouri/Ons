@@ -1078,18 +1078,39 @@ exports.uploadMyCV = (req, res) => {
 exports.getElderEmergencyRequests = (req, res) => {
   const elderId = req.params.elder_id;
 
-  db.query(
-    `SELECT emergency_id, elder_id, family_id, triggered_by_role, triggered_by_id,
-            emergency_type, severity, latitude, longitude, status, created_at, updated_at, resolved_at
-     FROM emergency_requests
-     WHERE elder_id = ?
-     ORDER BY created_at DESC`,
-    [elderId],
-    (err, rows) => {
-      if (err) return res.status(500).json({ msg: "Error fetching emergency requests", err });
-      res.status(200).json({ emergencies: rows });
+  const sql = `
+    SELECT 
+      emergency_id, 
+      elder_id, 
+      family_id, 
+      triggered_by_role, 
+      triggered_by_id,
+      emergency_type, 
+      severity, 
+      latitude, 
+      longitude, 
+      status, 
+      created_at, 
+      updated_at, 
+      resolved_at,
+      -- ✅ FIX: Prioritize description, then notes, then a professional fallback
+      COALESCE(NULLIF(description, ''), NULLIF(notes, ''), 'Emergency assistance requested via resident SOS button') AS description,
+      address_text
+    FROM emergency_requests
+    WHERE elder_id = ?
+    ORDER BY created_at DESC
+    LIMIT 50;
+  `;
+
+  db.query(sql, [elderId], (err, rows) => {
+    if (err) {
+      console.error("Error fetching emergency requests:", err);
+      return res.status(500).json({ msg: "Error fetching emergency requests", err });
     }
-  );
+    
+    // Return rows directly or wrapped in 'emergencies' key depending on your frontend needs
+    res.status(200).json({ emergencies: rows });
+  });
 };
   
 exports.updateEmergencyRequestStatus = (req, res) => {

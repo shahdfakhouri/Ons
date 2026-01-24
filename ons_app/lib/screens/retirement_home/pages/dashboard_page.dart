@@ -86,7 +86,7 @@ class _RetirementDashboardPageState extends State<RetirementDashboardPage> {
         children: [
           _bentoItem("Residents", _stats?['totalElders'], Icons.elderly_rounded, _sage),
           _bentoItem("Staff", _stats?['totalCaregivers'], Icons.badge_rounded, _denim),
-          _bentoItem("Alerts", _stats?['pendingPayments'], Icons.warning_amber_rounded, Colors.redAccent),
+          _bentoItem("Active Alerts", _stats?['totalAlerts'], Icons.warning_amber_rounded, Colors.redAccent),
           _bentoItem("Status", "Live", Icons.wifi_tethering_rounded, _deepNavy),
         ],
       );

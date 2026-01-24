@@ -825,6 +825,13 @@ class _AlertsTab extends StatelessWidget {
   final int elderId, reload;
   final CaregiverApi api;
   final String Function(dynamic) fmt;
+
+  // 🎨 Palette Constants
+  static const _deepNavy = Color(0xFF313647);
+  static const _denim = Color(0xFF435663);
+  static const _sage = Color(0xFFA3B087);
+  static const _cream = Color(0xFFFFF8D4);
+
   const _AlertsTab({required this.elderId, required this.reload, required this.api, required this.fmt});
 
   @override
@@ -832,24 +839,91 @@ class _AlertsTab extends StatelessWidget {
     return FutureBuilder<List<Map<String, dynamic>>>(
       key: ValueKey('al_$reload'),
       future: api.getElderEmergencyRequests(elderId),
-
       builder: (context, snap) {
-        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator(color: _deepNavy));
         final alerts = snap.data!;
+
         return ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(32),
           children: [
-            const Text('Open Alerts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            const SizedBox(height: 12),
-            if (alerts.isEmpty) const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No active alerts.'))),
-            ...alerts.map((a) => Card(child: ListTile(
-              title: Text(a['message'] ?? 'Alert'),
-              subtitle: Text('Type: ${a['type']} • Created: ${fmt(a['created_at'])}'),
-              trailing: Chip(label: Text(a['severity'].toString().toUpperCase(), style: const TextStyle(fontSize: 10))),
-            ))),
+            const Text('Urgent Alerts', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 26, color: _deepNavy, letterSpacing: -0.5)),
+            const SizedBox(height: 16),
+            if (alerts.isEmpty) 
+              _buildEmptyState()
+            else 
+              ...alerts.map((a) => _buildEmergencyBento(a)),
           ],
         );
       },
+    );
+  }
+
+  Widget _buildEmergencyBento(Map<String, dynamic> a) {
+    final severity = (a['severity'] ?? 'critical').toString().toLowerCase();
+    final Color sevColor = severity == 'critical' ? Colors.redAccent : _sage;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [BoxShadow(color: _deepNavy.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 8))],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 🚨 Emergency Indicator Pulse
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: sevColor.withOpacity(0.1), shape: BoxShape.circle),
+              child: Icon(Icons.emergency_share_rounded, color: sevColor, size: 24),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        (a['emergency_type'] ?? 'SOS').toString().toUpperCase(),
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: sevColor, letterSpacing: 1.2),
+                      ),
+                      Text(fmt(a['created_at']), style: const TextStyle(color: _denim, fontSize: 12, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Using 'description' or 'address_text' to reduce ambiguity
+                  Text(
+                    a['description'] ?? a['message'] ?? 'No specific details provided',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: _deepNavy, height: 1.3),
+                  ),
+                  const SizedBox(height: 12),
+                  if (a['address_text'] != null)
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_rounded, size: 14, color: _denim),
+                        const SizedBox(width: 4),
+                        Expanded(child: Text(a['address_text'], style: const TextStyle(color: _denim, fontSize: 12))),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Container(
+      padding: const EdgeInsets.all(40),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(32)),
+      child: const Center(child: Text('All systems normal. No active alerts.', style: TextStyle(color: _denim, fontStyle: FontStyle.italic))),
     );
   }
 }

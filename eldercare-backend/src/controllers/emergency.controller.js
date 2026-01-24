@@ -164,15 +164,18 @@ exports.getHomeEmergencies = (req, res) => {
   const status = (req.query.status || "open").toLowerCase();
 
   let sql = `
-    SELECT
-      er.emergency_id, er.elder_id, er.family_id, er.emergency_type, er.severity,
-      er.latitude, er.longitude, er.address_text, er.status,
-      er.assigned_home_id, er.created_at,
-      en.distance_km, en.response, en.notified_at, en.responded_at
-    FROM emergency_notifications en
-    JOIN emergency_requests er ON er.emergency_id = en.emergency_id
-    WHERE en.home_id = ?
-  `;
+  SELECT
+    er.emergency_id, er.elder_id, er.family_id, er.emergency_type, er.severity,
+    er.latitude, er.longitude, er.address_text, er.status,
+    er.assigned_home_id, er.created_at,
+    en.distance_km, en.response, en.notified_at, en.responded_at,
+    e.name AS elder_name
+  FROM emergency_notifications en
+  JOIN emergency_requests er ON er.emergency_id = en.emergency_id
+  LEFT JOIN elders e ON e.elder_id = er.elder_id
+  WHERE en.home_id = ?
+`;
+
   const params = [homeId];
 
   if (status !== "all") {

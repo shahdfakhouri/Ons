@@ -10,12 +10,8 @@ import 'pages/elders_page.dart';
 import 'pages/alerts_page.dart';
 import 'pages/emergencies_page.dart';
 import 'pages/shifts_page.dart';
-import 'pages/daily_summaries_page.dart';
-import 'pages/reports_page.dart';
-import 'pages/payments_page.dart';
-import 'pages/transactions_page.dart';
+import 'pages/payments_page.dart'; // Correctly mapped
 import 'pages/incidents_page.dart';
-import 'pages/notes_page.dart';
 
 class RetirementHomeLayout extends StatefulWidget {
   final int initialIndex;
@@ -28,18 +24,22 @@ class RetirementHomeLayout extends StatefulWidget {
 class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
   late int _index;
   
-  // 🎨 Your Signature Theme
   static const _deepNavy = Color(0xFF313647);
   static const _denim = Color(0xFF435663);
   static const _sage = Color(0xFFA3B087);
   static const _cream = Color(0xFFFFF8D4);
 
+  // ✅ SYNCED PAGE LIST (Must match the Sidebar order)
   final List<Widget> _pages = const [
-    RetirementDashboardPage(), RetirementCaregiversPage(), RetirementAssignmentsPage(),
-    RetirementEldersPage(), RetirementAlertsPage(), RetirementEmergenciesPage(),
-    RetirementShiftsPage(), RetirementDailySummariesPage(), RetirementReportsPage(),
-    RetirementPaymentsPage(), RetirementTransactionsPage(), RetirementIncidentsPage(),
-    RetirementNotesPage(),
+    RetirementDashboardPage(), // 0
+    RetirementCaregiversPage(), // 1
+    RetirementAssignmentsPage(), // 2
+    RetirementEldersPage(),      // 3
+    RetirementAlertsPage(),      // 4
+    RetirementEmergenciesPage(), // 5
+    RetirementShiftsPage(),      // 6
+    RetirementPaymentsPage(),    // 7
+    RetirementIncidentsPage(),   // 8
   ];
 
   @override
@@ -58,7 +58,7 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
     return LayoutBuilder(builder: (context, c) {
       final isWide = c.maxWidth >= 1100;
       return Scaffold(
-        backgroundColor: _cream, // Main Biophilic background
+        backgroundColor: _cream,
         appBar: isWide ? null : AppBar(
           title: const Text('Ons Admin'), 
           backgroundColor: _deepNavy, 
@@ -110,7 +110,7 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
   Widget _buildSidebar({required bool isMobile}) {
     return NavigationDrawer(
       backgroundColor: Colors.white,
-      indicatorColor: _sage.withOpacity(0.3), // Sage highlight for selection
+      indicatorColor: _sage.withOpacity(0.3),
       selectedIndex: _index,
       onDestinationSelected: (i) => _goTo(i, closeDrawer: isMobile),
       children: [
@@ -125,7 +125,6 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
         _dest(Icons.warning_amber_outlined, Icons.warning_rounded, 'Emergencies'),
         _dest(Icons.schedule_outlined, Icons.schedule_rounded, 'Shifts'),
         const _SidebarLabel("FINANCE & DATA"),
-        _dest(Icons.insights_outlined, Icons.insights_rounded, 'Reports'),
         _dest(Icons.payments_outlined, Icons.payments_rounded, 'Payments'),
         _dest(Icons.report_gmailerrorred_outlined, Icons.report_rounded, 'Incidents'),
         const SizedBox(height: 20),
