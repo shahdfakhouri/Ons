@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:ons_app/services/family_api.dart';
 import 'package:ons_app/screens/family/widgets/family_ui.dart';
 
-import 'profile/payments_page.dart';
-import 'profile/transactions_page.dart';
+// Import remaining linked pages
 import 'profile/reviews_page.dart';
 import 'profile/emergency_page.dart';
 import 'profile/events_page.dart';
@@ -19,6 +18,12 @@ class _FamilyProfilePageState extends State<FamilyProfilePage> {
   final api = FamilyApi();
   Future<void> _reload() async => setState(() {});
 
+  // 🎨 Signature Theme Palette
+  static const _deepNavy = Color(0xFF313647);
+  static const _denim = Color(0xFF435663);
+  static const _sage = Color(0xFFA3B087);
+  static const _cream = Color(0xFFFFF8D4);
+
   final name = TextEditingController();
   final phone = TextEditingController();
   final city = TextEditingController();
@@ -29,13 +34,9 @@ class _FamilyProfilePageState extends State<FamilyProfilePage> {
 
   @override
   void dispose() {
-    name.dispose();
-    phone.dispose();
-    city.dispose();
-    budget.dispose();
-    preference.dispose();
-    skills.dispose();
-    hours.dispose();
+    name.dispose(); phone.dispose(); city.dispose();
+    budget.dispose(); preference.dispose();
+    skills.dispose(); hours.dispose();
     super.dispose();
   }
 
@@ -51,11 +52,23 @@ class _FamilyProfilePageState extends State<FamilyProfilePage> {
         'hours_needed': int.tryParse(hours.text.trim()),
       });
       if (!mounted) return;
-      showSnack(context, 'Profile updated ✅');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile updated ✅'), 
+          backgroundColor: _sage, 
+          behavior: SnackBarBehavior.floating
+        ),
+      );
       _reload();
     } catch (e) {
       if (!mounted) return;
-      showSnack(context, e.toString(), isError: true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString()), 
+          backgroundColor: Colors.redAccent, 
+          behavior: SnackBarBehavior.floating
+        ),
+      );
     }
   }
 
@@ -66,20 +79,26 @@ class _FamilyProfilePageState extends State<FamilyProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _cream,
       appBar: AppBar(
-        title: const Text('Profile'),
-        actions: [IconButton(onPressed: _reload, icon: const Icon(Icons.refresh))],
+        title: const Text('My Account', style: TextStyle(fontWeight: FontWeight.w900)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: _deepNavy,
+        actions: [IconButton(onPressed: _reload, icon: const Icon(Icons.refresh_rounded))],
       ),
       body: FutureBuilder(
         future: api.getMyProfile(),
         builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          if (snap.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator(color: _deepNavy));
+          }
           if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
 
           final data = (snap.data as Map<String, dynamic>? ?? {});
           final p = (data['profile'] as Map?) ?? {};
 
-          // fill only if empty (avoid overwriting user typing on rebuild)
+          // Fill controllers with existing data
           if (name.text.isEmpty) name.text = (p['name'] ?? '').toString();
           if (phone.text.isEmpty) phone.text = (p['phone'] ?? '').toString();
           if (city.text.isEmpty) city.text = (p['city'] ?? '').toString();
@@ -89,80 +108,125 @@ class _FamilyProfilePageState extends State<FamilyProfilePage> {
           if (hours.text.isEmpty) hours.text = (p['hours_needed'] ?? '').toString();
 
           return ListView(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             children: [
-              const SectionTitle('My Profile'),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: [
-                      AppTextField(controller: name, label: 'name'),
-                      const SizedBox(height: 10),
-                      AppTextField(controller: phone, label: 'phone'),
-                      const SizedBox(height: 10),
-                      AppTextField(controller: city, label: 'city'),
-                      const SizedBox(height: 10),
-                      AppTextField(controller: budget, label: 'budget', keyboardType: TextInputType.number),
-                      const SizedBox(height: 10),
-                      AppTextField(controller: preference, label: 'preference (caregiver/retirement_home)'),
-                      const SizedBox(height: 10),
-                      AppTextField(controller: skills, label: 'skills_required', maxLines: 2),
-                      const SizedBox(height: 10),
-                      AppTextField(controller: hours, label: 'hours_needed', keyboardType: TextInputType.number),
-                      const SizedBox(height: 10),
-                      SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _save, child: const Text('Save'))),
-                    ],
-                  ),
-                ),
-              ),
+              _buildHeader(p['name'] ?? 'Family User'),
+              const SizedBox(height: 32),
+              
+              _buildSection("Personal Information", [
+                _buildField(name, "Full Name", Icons.person_outline),
+                _buildField(phone, "Mobile Number", Icons.phone_outlined),
+                _buildField(city, "Residence City", Icons.location_city_outlined),
+              ]),
 
-              const SizedBox(height: 14),
-              const SectionTitle('More'),
-              Card(
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.payments),
-                      title: const Text('Payments'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _open(const PaymentsPage()),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.receipt_long),
-                      title: const Text('Transactions'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _open(const TransactionsPage()),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.star),
-                      title: const Text('Reviews'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _open(const ReviewsPage()),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.sos),
-                      title: const Text('Emergency'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _open(const EmergencyPage()),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.event),
-                      title: const Text('Events (CRUD)'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _open(const EventsPage()),
-                    ),
-                  ],
-                ),
-              ),
+              const SizedBox(height: 24),
+              
+              _buildSection("Care Preferences", [
+                _buildField(budget, "Monthly Budget", Icons.monetization_on_outlined, isNum: true),
+                _buildField(preference, "Preference", Icons.favorite_border_rounded),
+                _buildField(skills, "Required Skills", Icons.psychology_outlined, maxLines: 2),
+                _buildField(hours, "Weekly Hours Needed", Icons.timer_outlined, isNum: true),
+              ]),
+
+              const SizedBox(height: 32),
+              _buildSaveButton(),
+
+              const SizedBox(height: 48),
+              _buildSection("Safety & Activity", [
+                _actionTile(Icons.star_outline_rounded, 'My Care Reviews', const ReviewsPage()),
+                _actionTile(Icons.sos_rounded, 'Emergency Protocol', const EmergencyPage()),
+                _actionTile(Icons.calendar_month_outlined, 'Scheduled Events', const EventsPage(), isLast: true),
+              ], isActionCard: true),
+              const SizedBox(height: 40),
             ],
           );
         },
       ),
+    );
+  }
+
+  Widget _buildHeader(String username) {
+    return Column(
+      children: [
+        CircleAvatar(
+          radius: 50,
+          backgroundColor: _deepNavy,
+          child: Text(username.isNotEmpty ? username[0].toUpperCase() : 'U', 
+            style: const TextStyle(color: _cream, fontSize: 32, fontWeight: FontWeight.bold)),
+        ),
+        const SizedBox(height: 16),
+        Text(username, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: _deepNavy)),
+      ],
+    );
+  }
+
+  Widget _buildSection(String title, List<Widget> children, {bool isActionCard = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 12),
+          child: Text(title.toUpperCase(), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: _denim, letterSpacing: 1.5)),
+        ),
+        Container(
+          padding: isActionCard ? EdgeInsets.zero : const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [BoxShadow(color: _deepNavy.withOpacity(0.04), blurRadius: 24, offset: const Offset(0, 8))],
+          ),
+          child: Column(children: children),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildField(TextEditingController c, String label, IconData icon, {bool isNum = false, int maxLines = 1}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: TextField(
+        controller: c,
+        maxLines: maxLines,
+        keyboardType: isNum ? TextInputType.number : TextInputType.text,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, color: _denim, size: 20),
+          filled: true,
+          fillColor: _cream.withOpacity(0.3),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSaveButton() {
+    return SizedBox(
+      height: 60,
+      child: ElevatedButton(
+        onPressed: _save,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _deepNavy,
+          foregroundColor: _cream,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          elevation: 0,
+        ),
+        child: const Text('Update Profile Info', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+      ),
+    );
+  }
+
+  Widget _actionTile(IconData icon, String title, Widget page, {bool isLast = false}) {
+    return Column(
+      children: [
+        ListTile(
+          leading: Icon(icon, color: _denim),
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: _deepNavy)),
+          trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: _denim),
+          onTap: () => _open(page),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+        ),
+        if (!isLast) const Divider(height: 1, indent: 60),
+      ],
     );
   }
 }

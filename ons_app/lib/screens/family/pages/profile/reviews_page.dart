@@ -14,15 +14,21 @@ class _ReviewsPageState extends State<ReviewsPage> {
   final api = FamilyApi();
   final publicApi = PublicApi();
 
-  Future<void> _reload() async => setState(() {});
+  // 🎨 Ons Signature Theme Palette
+  static const _deepNavy = Color(0xFF313647);
+  static const _denim = Color(0xFF435663);
+  static const _sage = Color(0xFFA3B087);
+  static const _cream = Color(0xFFFFF8D4);
 
-  // submit review (family)
-  String role = 'caregiver';
-  final targetId = TextEditingController();
-  final rating = TextEditingController(text: '5');
-  final comment = TextEditingController();
+  // Submit Logic State
+  String _selectedRole = 'caregiver';
+  int? _selectedTargetId;
+  String? _selectedTargetName;
+  
+  final _ratingController = TextEditingController(text: '5');
+  final _commentController = TextEditingController();
 
-  // public lookup
+  // Public Lookup State
   String lookupRole = 'caregiver';
   final lookupId = TextEditingController();
   bool lookupLoading = false;
@@ -31,36 +37,38 @@ class _ReviewsPageState extends State<ReviewsPage> {
 
   @override
   void dispose() {
-    targetId.dispose();
-    rating.dispose();
-    comment.dispose();
+    _ratingController.dispose();
+    _commentController.dispose();
     lookupId.dispose();
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    final id = int.tryParse(targetId.text.trim());
-    final r = int.tryParse(rating.text.trim());
-    if (id == null || r == null) {
-      showSnack(context, 'target_id and rating required', isError: true);
-      return;
-    }
-    if (r < 1 || r > 5) {
-      showSnack(context, 'rating must be 1..5', isError: true);
+  Future<void> _reload() async => setState(() {});
+
+  Future<void> _submitReview() async {
+    final r = int.tryParse(_ratingController.text.trim());
+    if (_selectedTargetId == null || r == null) {
+      showSnack(context, 'Please select a provider and rating', isError: true);
       return;
     }
 
     try {
       await api.createReview({
-        'target_role': role,
-        'target_id': id,
+        'target_role': _selectedRole,
+        'target_id': _selectedTargetId,
         'rating': r,
-        'comment': comment.text.trim().isEmpty ? null : comment.text.trim(),
+        'comment': _commentController.text.trim().isEmpty ? null : _commentController.text.trim(),
       });
+      
       if (!mounted) return;
-      showSnack(context, 'Review submitted ✅');
-      targetId.clear();
-      comment.clear();
+      showSnack(context, 'Review for $_selectedTargetName submitted ✅');
+      
+      // Reset form
+      _commentController.clear();
+      setState(() {
+        _selectedTargetId = null;
+        _selectedTargetName = null;
+      });
       _reload();
     } catch (e) {
       if (!mounted) return;
@@ -71,7 +79,7 @@ class _ReviewsPageState extends State<ReviewsPage> {
   Future<void> _fetchPublic() async {
     final id = int.tryParse(lookupId.text.trim());
     if (id == null) {
-      showSnack(context, 'Enter a valid id', isError: true);
+      showSnack(context, 'Enter a valid ID', isError: true);
       return;
     }
 
@@ -102,234 +110,221 @@ class _ReviewsPageState extends State<ReviewsPage> {
 
   Widget _stars(dynamic rating) {
     final r = (rating is num) ? rating.toDouble() : double.tryParse('$rating') ?? 0.0;
-    final full = r.floor().clamp(0, 5);
-    final half = (r - full) >= 0.5 ? 1 : 0;
-    final empty = 5 - full - half;
-
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: [
-        for (int i = 0; i < full; i++) const Icon(Icons.star, size: 18),
-        for (int i = 0; i < half; i++) const Icon(Icons.star_half, size: 18),
-        for (int i = 0; i < empty; i++) const Icon(Icons.star_border, size: 18),
-      ],
-    );
-  }
-
-  Widget _publicResult() {
-    if (lookupLoading) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: LinearProgressIndicator(),
-        ),
-      );
-    }
-    if (lookupError != null) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text('Error: $lookupError'),
-        ),
-      );
-    }
-    if (lookupData == null) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('Fetch public reviews for a caregiver/home id.'),
-        ),
-      );
-    }
-
-    final summary = (lookupData!['summary'] as Map?)?.cast<String, dynamic>() ?? {};
-    final latest = (lookupData!['latest_reviews'] as List?) ?? const [];
-
-    final total = summary['total_reviews'] ?? 0;
-    final avg = summary['avg_rating'];
-
-    return Column(
-      children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.reviews_outlined),
-            title: Text('Total reviews: $total'),
-            subtitle: Row(
-              children: [
-                Text('Avg: ${avg ?? '-'}  '),
-                _stars(avg),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Latest reviews', style: TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 8),
-                if (latest.isEmpty)
-                  const Text('No reviews yet.')
-                else
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: latest.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, i) {
-                      final r = (latest[i] as Map).cast<String, dynamic>();
-                      return ListTile(
-                        leading: const Icon(Icons.star),
-                        title: Row(
-                          children: [
-                            Text('Rating: ${r['rating'] ?? '-'}  '),
-                            _stars(r['rating']),
-                          ],
-                        ),
-                        subtitle: Text('${r['comment'] ?? ''}\n${r['created_at'] ?? ''}'),
-                      );
-                    },
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ],
+      children: List.generate(5, (index) {
+        return Icon(
+          index < r.floor() ? Icons.star_rounded : (index < r ? Icons.star_half_rounded : Icons.star_outline_rounded),
+          size: 18,
+          color: _sage,
+        );
+      }),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _cream,
       appBar: AppBar(
-        title: const Text('Reviews'),
-        actions: [IconButton(onPressed: _reload, icon: const Icon(Icons.refresh))],
+        title: const Text('Feedback Center', style: TextStyle(fontWeight: FontWeight.w900)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: _deepNavy,
+        actions: [IconButton(onPressed: _reload, icon: const Icon(Icons.refresh_rounded))],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(24),
         children: [
-          // ---------------- PUBLIC LOOKUP ----------------
-          const SectionTitle('Public reviews lookup'),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  DropdownButtonFormField<String>(
-                    value: lookupRole,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: 'target_role',
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'caregiver', child: Text('caregiver')),
-                      DropdownMenuItem(value: 'retirement_home', child: Text('retirement_home')),
-                    ],
-                    onChanged: (v) => setState(() => lookupRole = v ?? 'caregiver'),
-                  ),
-                  const SizedBox(height: 10),
-                  AppTextField(
-                    controller: lookupId,
-                    label: lookupRole == 'caregiver' ? 'caregiver_id' : 'home_id',
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _fetchPublic,
-                      icon: const Icon(Icons.search),
-                      label: const Text('Fetch public reviews'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          _buildContextualReviewHeader(),
+          const SizedBox(height: 32),
+          const SectionTitle('Your Past Feedback'),
+          _buildMyReviewsHistory(),
+          const SizedBox(height: 32),
+          const SectionTitle('Public Reputation Lookup'),
+          _buildPublicLookupSection(),
           const SizedBox(height: 8),
           _publicResult(),
+        ],
+      ),
+    );
+  }
 
+  // ✅ NEW: Automatic Provider Detection Logic
+  // ✅ Full Enhanced Review Selection (Names instead of IDs)
+Widget _buildContextualReviewHeader() {
+  return FutureBuilder(
+    future: api.getMyProfile(),
+    builder: (context, snap) {
+      if (!snap.hasData) return const Center(child: LinearProgressIndicator());
+      
+      final data = snap.data as Map<String, dynamic>;
+      
+      // These names are pulled from your updated Node.js controller
+      final caregiverName = data['assigned_caregiver_name'];
+      final caregiverId = data['assigned_caregiver_id'];
+      final homeName = data['retirement_home_name'];
+      final homeId = data['retirement_home_id'];
+
+      return Container(
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [BoxShadow(color: const Color(0xFF313647).withOpacity(0.05), blurRadius: 20)],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Share Your Experience", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              children: [
+                if (caregiverId != null)
+                  _providerChip(caregiverName ?? "Assigned Caregiver", 'caregiver', caregiverId),
+                if (homeId != null)
+                  _providerChip(homeName ?? "Facility", 'retirement_home', homeId),
+              ],
+            ),
+            if (_selectedTargetId != null) ...[
+              const Divider(height: 48),
+              // ✅ UI now shows NAME instead of ID
+              Text("Reviewing: $_selectedTargetName", style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFFA3B087))),
+              const SizedBox(height: 16),
+              AppTextField(controller: _ratingController, label: 'Rating (1-5)', keyboardType: TextInputType.number),
+              const SizedBox(height: 12),
+              AppTextField(controller: _commentController, label: 'Your feedback...', maxLines: 3),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _submitReview,
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF313647)),
+                  child: const Text("Submit Feedback"),
+                ),
+              ),
+            ]
+          ],
+        ),
+      );
+    },
+  );
+}
+
+  Widget _providerChip(String name, String role, int id) {
+    bool selected = _selectedTargetId == id;
+    return ChoiceChip(
+      label: Text(name),
+      selected: selected,
+      onSelected: (val) => setState(() {
+        _selectedRole = role;
+        _selectedTargetId = val ? id : null;
+        _selectedTargetName = val ? name : null;
+      }),
+      selectedColor: _sage,
+      backgroundColor: _cream,
+      labelStyle: TextStyle(color: selected ? Colors.white : _deepNavy, fontWeight: FontWeight.bold),
+    );
+  }
+
+  Widget _buildMyReviewsHistory() {
+    return FutureBuilder(
+      future: api.getMyReviews(),
+      builder: (context, snap) {
+        if (snap.connectionState != ConnectionState.done) return const SizedBox();
+        final data = (snap.data as Map<String, dynamic>? ?? {});
+        final list = (data['reviews'] as List?) ?? [];
+
+        if (list.isEmpty) {
+          return const Card(child: Padding(padding: EdgeInsets.all(24), child: Text("You haven't posted any reviews yet.")));
+        }
+
+        return Column(
+          children: list.map((r) => Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+            child: ListTile(
+              leading: CircleAvatar(backgroundColor: _cream, child: const Icon(Icons.star_rounded, color: _sage)),
+              title: Text('${r['target_role'].toString().replaceAll('_', ' ')} #${r['target_id']}'),
+              subtitle: Text(r['comment'] ?? 'No comment provided.'),
+              trailing: _stars(r['rating']),
+            ),
+          )).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildPublicLookupSection() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(32)),
+      child: Column(
+        children: [
+          DropdownButtonFormField<String>(
+            value: lookupRole,
+            decoration: InputDecoration(
+              labelText: 'Target Type',
+              filled: true,
+              fillColor: _cream.withOpacity(0.3),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+            ),
+            items: const [
+              DropdownMenuItem(value: 'caregiver', child: Text('Caregivers')),
+              DropdownMenuItem(value: 'retirement_home', child: Text('Facilities')),
+            ],
+            onChanged: (v) => setState(() => lookupRole = v!),
+          ),
+          const SizedBox(height: 12),
+          AppTextField(controller: lookupId, label: 'Search by ID', keyboardType: TextInputType.number),
           const SizedBox(height: 16),
-
-          // ---------------- FAMILY: SUBMIT ----------------
-          const SectionTitle('Submit review'),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  DropdownButtonFormField<String>(
-                    value: role,
-                    decoration: const InputDecoration(border: OutlineInputBorder(), labelText: 'target_role'),
-                    items: const [
-                      DropdownMenuItem(value: 'caregiver', child: Text('caregiver')),
-                      DropdownMenuItem(value: 'retirement_home', child: Text('retirement_home')),
-                    ],
-                    onChanged: (v) => setState(() => role = v ?? 'caregiver'),
-                  ),
-                  const SizedBox(height: 10),
-                  AppTextField(controller: targetId, label: 'target_id', keyboardType: TextInputType.number),
-                  const SizedBox(height: 10),
-                  AppTextField(controller: rating, label: 'rating (1..5)', keyboardType: TextInputType.number),
-                  const SizedBox(height: 10),
-                  AppTextField(controller: comment, label: 'comment (optional)', maxLines: 3),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(onPressed: _submit, child: const Text('Submit')),
-                  ),
-                ],
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _fetchPublic,
+              icon: const Icon(Icons.search_rounded),
+              label: const Text("Check Reputation"),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                side: const BorderSide(color: _denim),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
             ),
-          ),
-
-          const SizedBox(height: 12),
-
-          // ---------------- FAMILY: MY REVIEWS ----------------
-          const SectionTitle('My reviews'),
-          FutureBuilder(
-            future: api.getMyReviews(),
-            builder: (context, snap) {
-              if (snap.connectionState != ConnectionState.done) {
-                return const Card(child: Padding(padding: EdgeInsets.all(16), child: LinearProgressIndicator()));
-              }
-              if (snap.hasError) {
-                return Card(child: Padding(padding: const EdgeInsets.all(16), child: Text('Error: ${snap.error}')));
-              }
-
-              final data = (snap.data as Map<String, dynamic>? ?? {});
-              final list = (data['reviews'] as List?) ?? const [];
-
-              if (list.isEmpty) {
-                return const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No reviews yet.')));
-              }
-
-              return Card(
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: list.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (context, i) {
-                    final r = (list[i] as Map).cast<String, dynamic>();
-                    return ListTile(
-                      leading: const Icon(Icons.star),
-                      title: Text(
-                        '${r['target_role']} #${r['target_id']} • Rating: ${r['rating']}',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: Text('${r['comment'] ?? ''}\n${r['created_at'] ?? ''}'),
-                    );
-                  },
-                ),
-              );
-            },
           ),
         ],
       ),
+    );
+  }
+
+  Widget _publicResult() {
+    if (lookupLoading) return const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()));
+    if (lookupError != null) return Text("Error: $lookupError", style: const TextStyle(color: Colors.red));
+    if (lookupData == null) return const SizedBox();
+
+    final summary = (lookupData!['summary'] as Map?)?.cast<String, dynamic>() ?? {};
+    final latest = (lookupData!['latest_reviews'] as List?) ?? const [];
+    final avg = summary['avg_rating'];
+
+    return Column(
+      children: [
+        Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: ListTile(
+            leading: const Icon(Icons.analytics_outlined, color: _deepNavy),
+            title: Text('Average Rating: ${avg ?? 'N/A'}'),
+            subtitle: _stars(avg),
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...latest.map((r) => Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            title: _stars(r['rating']),
+            subtitle: Text(r['comment'] ?? ''),
+          ),
+        )),
+      ],
     );
   }
 }
