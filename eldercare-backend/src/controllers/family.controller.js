@@ -10,17 +10,41 @@ exports.getDashboard = (req, res) => {
 
 exports.getMyProfile = (req, res) => {
   const familyId = req.user.id;
-  db.query(
-    `SELECT family_id, name, email, phone, city, budget, preference, skills_required, hours_needed, created_at
-     FROM family_members
-     WHERE family_id = ?`,
-    [familyId],
-    (err, rows) => {
-      if (err) return res.status(500).json({ msg: "Error fetching profile", err });
-      if (!rows.length) return res.status(404).json({ msg: "Family not found" });
-      res.status(200).json({ profile: rows[0] });
-    }
-  );
+
+  // This query joins the family to their elder, then to the elder's assignments
+  const sql = `
+    SELECT 
+      f.family_id, f.name, f.email, f.phone, f.city, f.budget, f.preference, 
+      f.skills_required, f.hours_needed, f.created_at,
+      c.caregiver_id AS assigned_caregiver_id, 
+      c.name AS assigned_caregiver_name,
+      rh.home_id AS retirement_home_id,
+      rh.name AS retirement_home_name
+    FROM family_members f
+    LEFT JOIN elder_family ef ON f.family_id = ef.family_id
+    LEFT JOIN elders e ON ef.elder_id = e.elder_id
+    LEFT JOIN elder_assignments ea ON e.elder_id = ea.elder_id
+    LEFT JOIN caregivers c ON ea.caregiver_id = c.caregiver_id
+    LEFT JOIN retirement_homes rh ON e.home_id = rh.home_id
+    WHERE f.family_id = ?
+    ORDER BY ef.is_primary DESC 
+    LIMIT 1
+  `;
+
+  db.query(sql, [familyId], (err, rows) => {
+    if (err) return res.status(500).json({ msg: "Error fetching enriched profile", err });
+    if (!rows.length) return res.status(404).json({ msg: "Family not found" });
+
+    // Send the enriched profile back to Flutter
+    res.status(200).json({ 
+      profile: rows[0],
+      // These keys are what the Flutter "Quick Selection" logic looks for:
+      assigned_caregiver_id: rows[0].assigned_caregiver_id,
+      assigned_caregiver_name: rows[0].assigned_caregiver_name,
+      retirement_home_id: rows[0].retirement_home_id,
+      retirement_home_name: rows[0].retirement_home_name
+    });
+  });
 };
 
 exports.updateProfile = (req, res) => {
