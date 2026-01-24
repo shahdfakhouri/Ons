@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-
 import 'package:ons_app/services/retirement_home_api.dart';
 import 'package:ons_app/services/retirement_medication_api.dart';
 
@@ -16,522 +14,151 @@ class _RetirementElderDetailsPageState extends State<RetirementElderDetailsPage>
   final _api = RetirementHomeApi();
   final _medApi = RetirementMedicationApi();
 
+  static const _deepNavy = Color(0xFF313647);
+  static const _denim = Color(0xFF435663);
+  static const _sage = Color(0xFFA3B087);
+  static const _cream = Color(0xFFFFF8D4);
+
   bool _loading = true;
   String? _error;
-
   Map<String, dynamic>? _elder;
   List<Map<String, dynamic>> _healthLogs = [];
   List<Map<String, dynamic>> _locations = [];
-  List<Map<String, dynamic>> _attendance = [];
-  Map<String, dynamic>? _summary;
-
-  // ✅ meds
-  List<Map<String, dynamic>> _meds = [];
   List<Map<String, dynamic>> _medLogs = [];
-  String? _logsDate; // YYYY-MM-DD
-
-  // summary form
-  final _summaryMood = TextEditingController();
-  final _summaryMeals = TextEditingController();
-  final _summaryActivities = TextEditingController();
-  bool? _medTaken;
-  final _sleepHours = TextEditingController();
-  final _summaryNotes = TextEditingController();
 
   late final TabController _tabs;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 6, vsync: this); // ✅ was 5
+    _tabs = TabController(length: 4, vsync: this); // Simplified to 4 Oversight Tabs
     _loadAll();
   }
 
-  @override
-  void dispose() {
-    _tabs.dispose();
-    _summaryMood.dispose();
-    _summaryMeals.dispose();
-    _summaryActivities.dispose();
-    _sleepHours.dispose();
-    _summaryNotes.dispose();
-    super.dispose();
-  }
-
-  String _fmt(dynamic v) {
-    if (v == null) return '-';
-    try {
-      final dt = DateTime.parse(v.toString());
-      return DateFormat('yyyy-MM-dd HH:mm').format(dt);
-    } catch (_) {
-      return v.toString();
-    }
-  }
-
   Future<void> _loadAll() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
-
+    setState(() { _loading = true; _error = null; });
     try {
-      final elder = await _api.getElderDetails(widget.elderId);
-      final logs = await _api.getElderHealthLogs(widget.elderId, limit: 50);
-      final loc = await _api.getElderLocationHistory(widget.elderId, limit: 200);
-      final att = await _api.getElderAttendance(widget.elderId, limit: 50);
-      final sum = await _api.getDailySummary(widget.elderId);
+      final results = await Future.wait([
+        _api.getElderDetails(widget.elderId),
+        _api.getElderHealthLogs(widget.elderId, limit: 20),
+        _api.getElderLocationHistory(widget.elderId, limit: 50),
+        _medApi.getMedicationLogs(widget.elderId),
+      ]);
 
-      // ✅ meds (from /api/medication)
-      final meds = await _medApi.getElderMedications(widget.elderId);
-      final medLogs = await _medApi.getMedicationLogs(widget.elderId, date: _logsDate);
-
-      _elder = elder;
-      _healthLogs = logs;
-      _locations = loc;
-      _attendance = att;
-      _summary = sum;
-
-      _meds = meds;
-      _medLogs = medLogs;
-
-      // prefill summary form (if exists)
-      if (sum != null) {
-        _summaryMood.text = (sum['mood'] ?? '').toString();
-        _summaryMeals.text = (sum['meals'] ?? '').toString();
-        _summaryActivities.text = (sum['activities'] ?? '').toString();
-
-        final mt = sum['medication_taken'];
-        if (mt == null) {
-          _medTaken = null;
-        } else if (mt is num) {
-          _medTaken = mt.toInt() == 1;
-        } else {
-          _medTaken = mt.toString() == '1' || mt.toString().toLowerCase() == 'true';
-        }
-
-        _sleepHours.text = (sum['sleep_hours'] ?? '').toString();
-        _summaryNotes.text = (sum['notes'] ?? '').toString();
-      }
+      _elder = results[0] as Map<String, dynamic>;
+      _healthLogs = results[1] as List<Map<String, dynamic>>;
+      _locations = results[2] as List<Map<String, dynamic>>;
+      _medLogs = results[3] as List<Map<String, dynamic>>;
 
       setState(() => _loading = false);
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      setState(() { _error = e.toString(); _loading = false; });
     }
-  }
-
-  Future<void> _checkInOut(bool checkIn) async {
-    final notes = await _askNotes();
-    try {
-      if (checkIn) {
-        await _api.checkInElder(widget.elderId, notes: notes);
-      } else {
-        await _api.checkOutElder(widget.elderId, notes: notes);
-      }
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(checkIn ? 'Checked in ✅' : 'Checked out ✅')),
-      );
-      await _loadAll();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
-    }
-  }
-
-  Future<String?> _askNotes() async {
-    final c = TextEditingController();
-    final result = await showDialog<String?>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Notes (optional)'),
-        content: TextField(controller: c, decoration: const InputDecoration(hintText: 'Write a note...')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, null), child: const Text('Skip')),
-          FilledButton(onPressed: () => Navigator.pop(context, c.text.trim()), child: const Text('Save')),
-        ],
-      ),
-    );
-    c.dispose();
-    return result;
-  }
-
-  Future<void> _saveSummary() async {
-    try {
-      await _api.upsertDailySummary(widget.elderId, {
-        'mood': _summaryMood.text.trim().isEmpty ? null : _summaryMood.text.trim(),
-        'meals': _summaryMeals.text.trim().isEmpty ? null : _summaryMeals.text.trim(),
-        'activities': _summaryActivities.text.trim().isEmpty ? null : _summaryActivities.text.trim(),
-        // ✅ safer (backend often expects 0/1/null)
-        'medication_taken': _medTaken == null ? null : (_medTaken! ? 1 : 0),
-        'sleep_hours': int.tryParse(_sleepHours.text.trim()),
-        'notes': _summaryNotes.text.trim().isEmpty ? null : _summaryNotes.text.trim(),
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Daily summary saved ✅')));
-      await _loadAll();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
-    }
-  }
-
-  Future<void> _dialogCreateMedication() async {
-    final name = TextEditingController();
-    final dosage = TextEditingController();
-    final frequency = TextEditingController();
-    final instructions = TextEditingController();
-    final startDate = TextEditingController(); // YYYY-MM-DD
-    final endDate = TextEditingController();   // YYYY-MM-DD
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Create medication plan'),
-        content: SingleChildScrollView(
-          child: Column(
-            children: [
-              TextField(controller: name, decoration: const InputDecoration(labelText: 'Name *')),
-              TextField(controller: dosage, decoration: const InputDecoration(labelText: 'Dosage')),
-              TextField(controller: frequency, decoration: const InputDecoration(labelText: 'Frequency')),
-              TextField(controller: instructions, decoration: const InputDecoration(labelText: 'Instructions'), maxLines: 2),
-              TextField(controller: startDate, decoration: const InputDecoration(labelText: 'Start date (YYYY-MM-DD)')),
-              TextField(controller: endDate, decoration: const InputDecoration(labelText: 'End date (YYYY-MM-DD)')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Create')),
-        ],
-      ),
-    );
-
-    if (ok != true) return;
-
-    if (name.text.trim().isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name is required')));
-      return;
-    }
-
-    try {
-      await _medApi.createMedicationPlan(widget.elderId, {
-        'name': name.text.trim(),
-        'dosage': dosage.text.trim().isEmpty ? null : dosage.text.trim(),
-        'frequency': frequency.text.trim().isEmpty ? null : frequency.text.trim(),
-        'instructions': instructions.text.trim().isEmpty ? null : instructions.text.trim(),
-        'start_date': startDate.text.trim().isEmpty ? null : startDate.text.trim(),
-        'end_date': endDate.text.trim().isEmpty ? null : endDate.text.trim(),
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Medication plan created ✅')));
-      await _loadAll();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $e')));
-    } finally {
-      name.dispose();
-      dosage.dispose();
-      frequency.dispose();
-      instructions.dispose();
-      startDate.dispose();
-      endDate.dispose();
-    }
-  }
-
-  Future<void> _pickLogsDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      firstDate: DateTime(now.year - 1),
-      lastDate: DateTime(now.year + 1),
-      initialDate: now,
-    );
-    if (picked == null) return;
-
-    setState(() => _logsDate = DateFormat('yyyy-MM-dd').format(picked));
-    await _loadAll();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    if (_error != null) return Scaffold(body: Center(child: Text(_error!)));
-
-    final elder = _elder ?? {};
-    final name = (elder['name'] ?? elder['elder_name'] ?? 'Elder').toString();
+    if (_loading) return const Scaffold(backgroundColor: _cream, body: Center(child: CircularProgressIndicator(color: _deepNavy)));
+    
+    final name = (_elder?['name'] ?? 'Resident').toString();
 
     return Scaffold(
+      backgroundColor: _cream,
       appBar: AppBar(
-        title: Text('$name (ID: ${widget.elderId})'),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        foregroundColor: _deepNavy,
+        title: Text(name, style: const TextStyle(fontWeight: FontWeight.w900)),
         bottom: TabBar(
           controller: _tabs,
-          isScrollable: true,
+          labelColor: _deepNavy,
+          unselectedLabelColor: _denim,
+          indicatorColor: _sage,
           tabs: const [
-            Tab(text: 'Details'),
-            Tab(text: 'Health Logs'),
-            Tab(text: 'Location'),
-            Tab(text: 'Attendance'),
-            Tab(text: 'Daily Summary'),
-            Tab(text: 'Meds'), // ✅ new
+            Tab(text: 'Profile'),
+            Tab(text: 'Health Vitals'),
+            Tab(text: 'GPS History'),
+            Tab(text: 'Medication Logs'),
           ],
         ),
-        actions: [
-          IconButton(onPressed: _loadAll, icon: const Icon(Icons.refresh)),
-        ],
       ),
       body: TabBarView(
         controller: _tabs,
         children: [
-          _detailsTab(elder),
-          _healthTab(),
-          _locationTab(),
-          _attendanceTab(),
-          _summaryTab(),
-          _medsTab(), // ✅ new
+          _profileTab(),
+          _listTab(_healthLogs, Icons.favorite_rounded, "vitals"),
+          _listTab(_locations, Icons.location_on_rounded, "location history"),
+          _listTab(_medLogs, Icons.medication_rounded, "medication administrations"),
         ],
       ),
     );
   }
 
-  Widget _detailsTab(Map<String, dynamic> elder) {
+  Widget _profileTab() {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(24),
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Profile', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Text('Name: ${elder['name'] ?? elder['elder_name'] ?? ''}'),
-                Text('Age: ${elder['age'] ?? ''}'),
-                Text('Gender: ${elder['gender'] ?? ''}'),
-                Text('DOB: ${elder['dob'] ?? ''}'),
-                Text('Location: ${elder['location'] ?? ''}'),
-                Text('Last check-in: ${elder['last_check_in'] ?? ''}'),
-                const SizedBox(height: 10),
-                Text('Caregiver', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 6),
-                Text('Name: ${elder['caregiver_name'] ?? '—'}'),
-                Text('Phone: ${elder['caregiver_phone'] ?? '—'}'),
-                Text('Email: ${elder['caregiver_email'] ?? '—'}'),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => _checkInOut(false),
-                icon: const Icon(Icons.logout),
-                label: const Text('Check-out'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: () => _checkInOut(true),
-                icon: const Icon(Icons.login),
-                label: const Text('Check-in'),
-              ),
-            ),
-          ],
-        ),
+        _bentoBox("Facility Record", [
+          _row("Age", "${_elder?['age']} Years"),
+          _row("Home City", "${_elder?['location']}"),
+          _row("Last Check-in", "${_elder?['last_check_in'] ?? 'Unknown'}"),
+        ]),
+        const SizedBox(height: 20),
+        _bentoBox("Staff in Charge", [
+          _row("Caregiver", "${_elder?['caregiver_name'] ?? 'None'}"),
+          _row("Phone", "${_elder?['caregiver_phone'] ?? '-'}"),
+        ]),
       ],
     );
   }
 
-  Widget _healthTab() {
-    if (_healthLogs.isEmpty) return const Center(child: Text('No health logs found.'));
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _healthLogs.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, i) {
-        final h = _healthLogs[i];
-        return Card(
-          child: ListTile(
-            title: Text('BP: ${h['blood_pressure'] ?? '-'} • Sugar: ${h['blood_sugar'] ?? '-'} • Temp: ${h['temperature'] ?? '-'}'),
-            subtitle: Text('Date: ${h['date'] ?? '-'}\nNotes: ${h['notes'] ?? '—'}'),
-          ),
-        );
-      },
+  Widget _listTab(List<Map<String, dynamic>> data, IconData icon, String type) {
+    if (data.isEmpty) return Center(child: Text("No $type recorded yet.", style: const TextStyle(color: _denim)));
+    return ListView.builder(
+      padding: const EdgeInsets.all(24),
+      itemCount: data.length,
+      itemBuilder: (context, i) => _logCard(data[i], icon),
     );
   }
 
-  Widget _locationTab() {
-    if (_locations.isEmpty) return const Center(child: Text('No location history found.'));
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _locations.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, i) {
-        final l = _locations[i];
-        return Card(
-          child: ListTile(
-            leading: const Icon(Icons.location_on_outlined),
-            title: Text('Lat: ${l['latitude'] ?? '-'} • Lng: ${l['longitude'] ?? '-'}'),
-            subtitle: Text('Recorded: ${l['recorded_at'] ?? '-'}'),
-          ),
-        );
-      },
+  Widget _bentoBox(String title, List<Widget> children) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _deepNavy)),
+          const Divider(height: 32),
+          ...children,
+        ],
+      ),
     );
   }
 
-  Widget _attendanceTab() {
-    if (_attendance.isEmpty) return const Center(child: Text('No attendance history found.'));
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: _attendance.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, i) {
-        final a = _attendance[i];
-        return Card(
-          child: ListTile(
-            leading: Icon((a['action'] ?? '').toString().contains('in') ? Icons.login : Icons.logout),
-            title: Text('Action: ${a['action'] ?? '-'}'),
-            subtitle: Text('Time: ${a['created_at'] ?? '-'}\nNotes: ${a['notes'] ?? '—'}'),
-          ),
-        );
-      },
+  Widget _row(String label, String val) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: _denim, fontWeight: FontWeight.w600)),
+          Text(val, style: const TextStyle(color: _deepNavy, fontWeight: FontWeight.w800)),
+        ],
+      ),
     );
   }
 
-  Widget _summaryTab() {
-    return ListView(
+  Widget _logCard(Map<String, dynamic> item, IconData icon) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
-      children: [
-        if (_summary != null)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                'Loaded summary for: ${_summary!['summary_date'] ?? 'today'}\n'
-                'Updated: ${_summary!['updated_at'] ?? '-'}',
-              ),
-            ),
-          ),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              children: [
-                TextField(controller: _summaryMood, decoration: const InputDecoration(labelText: 'Mood')),
-                TextField(controller: _summaryMeals, decoration: const InputDecoration(labelText: 'Meals')),
-                TextField(controller: _summaryActivities, decoration: const InputDecoration(labelText: 'Activities')),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<bool?>(
-                  value: _medTaken,
-                  items: const [
-                    DropdownMenuItem(value: null, child: Text('Medication: (unknown)')),
-                    DropdownMenuItem(value: true, child: Text('Medication: taken')),
-                    DropdownMenuItem(value: false, child: Text('Medication: not taken')),
-                  ],
-                  onChanged: (v) => setState(() => _medTaken = v),
-                ),
-                TextField(
-                  controller: _sleepHours,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Sleep hours'),
-                ),
-                TextField(controller: _summaryNotes, decoration: const InputDecoration(labelText: 'Notes')),
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    onPressed: _saveSummary,
-                    icon: const Icon(Icons.save),
-                    label: const Text('Save Summary'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ✅ NEW TAB
-  Widget _medsTab() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Row(
-          children: [
-            Expanded(child: Text('Medication plan', style: Theme.of(context).textTheme.titleMedium)),
-            FilledButton.icon(
-              onPressed: _dialogCreateMedication,
-              icon: const Icon(Icons.add),
-              label: const Text('Add'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-
-        if (_meds.isEmpty)
-          const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No medication plans yet.'))),
-        for (final m in _meds)
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.medication_outlined),
-              title: Text('${m['name'] ?? '-'} ${m['dosage'] != null ? '• ${m['dosage']}' : ''}'),
-              subtitle: Text(
-                'Freq: ${m['frequency'] ?? '-'}\n'
-                '${(m['instructions'] ?? '').toString()}\n'
-                'Start: ${m['start_date'] ?? '-'} • End: ${m['end_date'] ?? '-'}\n'
-                'Active: ${(m['active'] ?? 1).toString()}',
-              ),
-            ),
-          ),
-
-        const SizedBox(height: 18),
-        Row(
-          children: [
-            Expanded(child: Text('Medication logs', style: Theme.of(context).textTheme.titleMedium)),
-            TextButton(
-              onPressed: _pickLogsDate,
-              child: Text(_logsDate == null ? 'Pick date' : _logsDate!),
-            ),
-            if (_logsDate != null)
-              IconButton(
-                tooltip: 'Clear',
-                onPressed: () async {
-                  setState(() => _logsDate = null);
-                  await _loadAll();
-                },
-                icon: const Icon(Icons.clear),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-
-        if (_medLogs.isEmpty)
-          const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No medication logs found.'))),
-        for (final l in _medLogs)
-          Card(
-            child: ListTile(
-              title: Text('${l['name'] ?? '-'} ${l['dosage'] != null ? '• ${l['dosage']}' : ''}'),
-              subtitle: Text(
-                'Status: ${l['status'] ?? '-'}\n'
-                'Scheduled: ${l['scheduled_time'] ?? '-'}\n'
-                'Taken at: ${l['taken_at'] ?? '-'}\n'
-                'Created: ${_fmt(l['created_at'])}\n'
-                '${(l['notes'] ?? '').toString()}',
-              ),
-            ),
-          ),
-      ],
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+      child: ListTile(
+        leading: CircleAvatar(backgroundColor: _cream, child: Icon(icon, color: _sage, size: 20)),
+        title: Text(item.values.first.toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        subtitle: Text("Recorded at: ${item['date'] ?? item['recorded_at'] ?? 'Today'}", style: const TextStyle(fontSize: 12)),
+      ),
     );
   }
 }

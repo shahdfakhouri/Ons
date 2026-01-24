@@ -53,6 +53,17 @@ class CaregiverApi {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
+  /// ✅ ADD THIS (fixes: "patch isn't defined")
+  Future<Map<String, dynamic>> patch(String path, {Object? body}) async {
+    final res = await _client.patch(
+      _url(path),
+      headers: _headers(),
+      body: jsonEncode(body ?? {}),
+    );
+    _throwIfBad(res);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
   // =======================
   // ✅ DASHBOARD + PROFILE
   // =======================
@@ -159,12 +170,6 @@ class CaregiverApi {
     return await post('/elders/$elderId/incidents', body: body);
   }
 
-  Future<List<Map<String, dynamic>>> getMyIncidents() async {
-    final j = await get('/incidents');
-    final list = (j['incidents'] as List?) ?? [];
-    return list.map((e) => Map<String, dynamic>.from(e)).toList();
-  }
-
   Future<Map<String, dynamic>> getIncidentById(int incidentId) async {
     final j = await get('/incidents/$incidentId');
     return (j['incident'] as Map<String, dynamic>?) ?? {};
@@ -172,6 +177,16 @@ class CaregiverApi {
 
   Future<void> updateIncidentStatus(int incidentId, String status) async {
     await put('/incidents/$incidentId/status', body: {'status': status});
+  }
+
+  Future<List<Map<String, dynamic>>> getMyIncidents() async {
+    final res = await get('/incidents');
+    return List<Map<String, dynamic>>.from(res['incidents'] ?? []);
+  }
+
+  Future<List<Map<String, dynamic>>> getElderIncidents(int elderId) async {
+    final all = await getMyIncidents();
+    return all.where((x) => (x['elder_id'] == elderId)).toList();
   }
 
   // =======================
@@ -228,12 +243,11 @@ class CaregiverApi {
   // ✅ ALERTS
   // =======================
 
-Future<List<Map<String, dynamic>>> getMyAlerts() async {
-  final j = await get('/alerts');
-  final list = (j['alerts'] as List?) ?? [];
-  return list.map((e) => Map<String, dynamic>.from(e)).toList();
-}
-
+  Future<List<Map<String, dynamic>>> getMyAlerts() async {
+    final j = await get('/alerts');
+    final list = (j['alerts'] as List?) ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
 
   Future<List<Map<String, dynamic>>> getElderAlerts(int elderId) async {
     final j = await get('/elders/$elderId/alerts');
@@ -280,34 +294,45 @@ Future<List<Map<String, dynamic>>> getMyAlerts() async {
     return await post('/elders/$elderId/visits/request', body: body);
   }
 
+  // =======================
+  // ✅ MED LOG (special base)
+  // =======================
+
   Future<Map<String, dynamic>> logMedicationStatus(
-  int elderId, {
-  required int medicationId,
-  required String status,
-  String? scheduledTime,
-  String? notes,
-}) async {
-  final uri = Uri.parse('${ApiConfig.medicationBase}/elders/$elderId/medication-log');
+    int elderId, {
+    required int medicationId,
+    required String status,
+    String? scheduledTime,
+    String? notes,
+  }) async {
+    final uri = Uri.parse('${ApiConfig.medicationBase}/elders/$elderId/medication-log');
 
-  final res = await _client.post(
-    uri,
-    headers: _headers(),
-    body: jsonEncode({
-      'medication_id': medicationId,
-      'status': status,
-      if (scheduledTime != null && scheduledTime.trim().isNotEmpty) 'scheduled_time': scheduledTime.trim(),
-      if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
-    }),
-  );
+    final res = await _client.post(
+      uri,
+      headers: _headers(),
+      body: jsonEncode({
+        'medication_id': medicationId,
+        'status': status,
+        if (scheduledTime != null && scheduledTime.trim().isNotEmpty) 'scheduled_time': scheduledTime.trim(),
+        if (notes != null && notes.trim().isNotEmpty) 'notes': notes.trim(),
+      }),
+    );
 
-  _throwIfBad(res);
-  return jsonDecode(res.body) as Map<String, dynamic>;
-}
+    _throwIfBad(res);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
 
+  // =======================
+  // ✅ EMERGENCY / SOS (if your backend has these routes)
+  // =======================
 
+  Future<List<Map<String, dynamic>>> getElderEmergencyRequests(int elderId) async {
+    final res = await get('/elders/$elderId/emergency-requests');
+    final list = (res['emergencies'] as List?) ?? [];
+    return list.map((e) => Map<String, dynamic>.from(e)).toList();
+  }
 
-
-
-
-
+  Future<void> updateEmergencyStatus(int emergencyId, String status) async {
+    await patch('/emergency-requests/$emergencyId/status', body: {'status': status});
+  }
 }

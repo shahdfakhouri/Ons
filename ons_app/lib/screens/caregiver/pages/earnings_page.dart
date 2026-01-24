@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:ons_app/services/payment_api.dart';
+import 'package:ons_app/screens/caregiver/caregiver_layout.dart';
 
 class EarningsPage extends StatefulWidget {
   const EarningsPage({super.key});
@@ -24,6 +25,7 @@ class _EarningsPageState extends State<EarningsPage> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -33,32 +35,36 @@ class _EarningsPageState extends State<EarningsPage> {
       final rev = await _api.getReceiverRevenue();
       final tx = await _api.getReceiverTransactions(limit: 100);
 
-      setState(() {
-        _rev = rev;
-        _tx = tx;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _rev = rev;
+          _tx = tx;
+          _loading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
-  String _v(dynamic x, {String fallback = '-'}) {
-    final s = (x ?? '').toString().trim();
+  String _v(dynamic x, {String fallback = '0.00'}) {
+    if (x == null) return fallback;
+    final s = x.toString().trim();
     return s.isEmpty ? fallback : s;
   }
 
   String _prettyDate(dynamic raw) {
-    final s = _v(raw, fallback: '');
-    if (s.isEmpty || s == '-') return '-';
+    final s = (raw ?? '').toString().trim();
+    if (s.isEmpty) return '-';
     DateTime? dt = DateTime.tryParse(s);
-    dt ??= DateTime.tryParse(s.replaceFirst(' ', 'T'));
     if (dt == null) return s;
     final local = dt.isUtc ? dt.toLocal() : dt;
-    return DateFormat('MMM d, yyyy • h:mm a').format(local);
+    return DateFormat('MMM d • h:mm a').format(local);
   }
 
   @override
@@ -69,7 +75,7 @@ class _EarningsPageState extends State<EarningsPage> {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) return _buildErrorState(cs);
 
-    final total = _rev['receiver_revenue'] ?? _rev['totalRevenue'] ?? _rev['total_revenue'] ?? 0;
+    final total = _rev['receiver_revenue'] ?? _rev['total_revenue'] ?? 0;
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -111,11 +117,7 @@ class _EarningsPageState extends State<EarningsPage> {
         ),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(
-            color: cs.primary.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          )
+          BoxShadow(color: cs.primary.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))
         ],
       ),
       child: Column(
@@ -145,7 +147,7 @@ class _EarningsPageState extends State<EarningsPage> {
               children: [
                 Icon(Icons.verified_user_outlined, color: cs.onPrimary, size: 14),
                 const SizedBox(width: 8),
-                Text('Secure Payouts Enabled', style: TextStyle(color: cs.onPrimary, fontSize: 11)),
+                const Text('Secure Payouts Enabled', style: TextStyle(color: Colors.white, fontSize: 11)),
               ],
             ),
           )
@@ -159,7 +161,8 @@ class _EarningsPageState extends State<EarningsPage> {
         ? t['from_name']
         : '${t['from_role'] ?? 'System'}';
     
-    final isIncome = _v(t['type']).toLowerCase().contains('payment') || _v(t['type']).toLowerCase().contains('credit');
+    final type = _v(t['type']).toLowerCase();
+    final isIncome = type.contains('payment') || type.contains('credit') || type.contains('payout');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -184,7 +187,7 @@ class _EarningsPageState extends State<EarningsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_v(t['type']), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(_v(t['type']).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
                 Text('From: $fromLabel', style: tt.bodySmall?.copyWith(color: cs.secondary)),
               ],
             ),
@@ -194,10 +197,7 @@ class _EarningsPageState extends State<EarningsPage> {
             children: [
               Text(
                 '${isIncome ? "+" : ""}\$${_v(t['amount'])}',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isIncome ? Colors.green : cs.onSurface,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold, color: isIncome ? Colors.green : cs.onSurface),
               ),
               Text(_prettyDate(t['created_at']), style: const TextStyle(fontSize: 10, color: Colors.grey)),
             ],
@@ -215,7 +215,7 @@ class _EarningsPageState extends State<EarningsPage> {
           children: [
             Icon(Icons.receipt_long_outlined, size: 48, color: cs.outline),
             const SizedBox(height: 16),
-            const Text('No transactions to show yet.'),
+            const Text('No transactions to show yet.', style: TextStyle(color: Colors.grey)),
           ],
         ),
       ),

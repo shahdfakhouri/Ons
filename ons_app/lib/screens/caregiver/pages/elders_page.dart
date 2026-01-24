@@ -1,14 +1,9 @@
-// ======================
-// CAREGIVER: EldersPage (with Chat button per elder)
-// ======================
 import 'package:flutter/material.dart';
 import 'package:ons_app/services/caregiver_api.dart';
-import 'elder_detail_page.dart';
-
 import 'package:ons_app/services/chat_h2h_api.dart';
 import 'package:ons_app/screens/chat_h2h/chat_page.dart';
 import 'package:ons_app/services/auth_service.dart';
-
+import 'elder_detail_page.dart';
 
 class EldersPage extends StatefulWidget {
   const EldersPage({super.key});
@@ -23,12 +18,18 @@ class _EldersPageState extends State<EldersPage> {
 
   bool _loading = true;
   bool _chatBusy = false;
-
   String? _error;
   List<Map<String, dynamic>> _elders = [];
   String _q = '';
 
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -36,15 +37,19 @@ class _EldersPageState extends State<EldersPage> {
 
     try {
       final elders = await _api.getAssignedElders();
-      setState(() {
-        _elders = elders;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _elders = elders;
+          _loading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -52,38 +57,18 @@ class _EldersPageState extends State<EldersPage> {
     if (_chatBusy) return;
 
     final elderId = int.tryParse((e['elder_id'] ?? '').toString());
-    if (elderId == null) return;
-
-    // IMPORTANT:
-    // This requires backend to return family_id in getAssignedElders(),
-    // OR you add an endpoint to fetch family_id for this elder.
     final familyId = int.tryParse((e['family_id'] ?? '').toString());
-    if (familyId == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Missing family_id for this elder. Add it to /caregiver/elders response.')),
-      );
+    final caregiverId = AuthService().myId;
+
+    if (elderId == null || familyId == null) {
+      _showSnack('Information missing for chat initialization.');
       return;
     }
 
-    // caregiver id comes from JWT on backend, but your API expects it in body too.
-    // You can either:
-    // 1) decode it from token, or
-    // 2) modify backend to ignore caregiverId and use req.user.id
-    //
-    // For now we assume token already has id and you can pass it by decoding the JWT
-    // OR you already added caregiver_id in each elder row.
-final caregiverId = AuthService().myId;
-if (caregiverId == null) {
-  if (!mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('Missing caregiver id (login again).')),
-  );
-  return;
-}
-
-
-
+    if (caregiverId == null) {
+      _showSnack('Session expired. Please login again.');
+      return;
+    }
 
     setState(() => _chatBusy = true);
 
@@ -95,118 +80,176 @@ if (caregiverId == null) {
       );
 
       final convId = (res['conversationId'] ?? '').toString();
-      if (convId.isEmpty) throw Exception('No conversationId returned');
-
       if (!mounted) return;
+      
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => ChatH2HPage(conversationId: convId)),
       );
     } catch (err) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Chat failed: $err')),
-      );
+      _showSnack('Chat failed: $err');
     } finally {
       if (mounted) setState(() => _chatBusy = false);
     }
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _load();
+  void _showSnack(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
 
     if (_loading) return const Center(child: CircularProgressIndicator());
-
-    if (_error != null) {
-      return Center(
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Failed to load elders', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: 8),
-                Text(_error!, style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(height: 12),
-                FilledButton(onPressed: _load, child: const Text('Retry')),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
+    if (_error != null) return _buildErrorState(cs, tt);
 
     final filtered = _elders.where((e) {
       final name = (e['name'] ?? '').toString().toLowerCase();
       return name.contains(_q.toLowerCase());
     }).toList();
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                prefixIcon: Icon(Icons.search),
-                hintText: 'Search elders by name...',
-              ),
-              onChanged: (v) => setState(() => _q = v),
+    return Scaffold(
+      backgroundColor: const Color(0xFFF9F9F4), // Signature Ons Cream
+      body: Column(
+        children: [
+          _buildSearchHeader(cs),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: _load,
+              child: filtered.isEmpty
+                  ? _buildEmptyState(cs, tt)
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(20),
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) => _buildElderCard(filtered[index], cs, tt),
+                    ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchHeader(ColorScheme cs) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
+      ),
+      child: TextField(
+        onChanged: (v) => setState(() => _q = v),
+        decoration: InputDecoration(
+          hintText: 'Search residents...',
+          prefixIcon: Icon(Icons.search, color: cs.primary),
+          filled: true,
+          fillColor: const Color(0xFFF4F4F9),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 0),
         ),
-        const SizedBox(height: 12),
-        if (filtered.isEmpty)
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('No elders found.', style: Theme.of(context).textTheme.bodyMedium),
+      ),
+    );
+  }
+
+  Widget _buildElderCard(Map<String, dynamic> e, ColorScheme cs, TextTheme tt) {
+    final name = (e['name'] ?? 'Resident').toString();
+    final gender = (e['gender'] ?? 'Other').toString();
+    final lastCheck = (e['last_check_in'] ?? 'No data').toString();
+
+    return InkWell(
+      onTap: () {
+        final id = int.tryParse(e['elder_id'].toString());
+        if (id != null) Navigator.push(context, MaterialPageRoute(builder: (_) => ElderDetailPage(elderId: id)));
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 28,
+              backgroundColor: cs.primaryContainer,
+              child: Text(name[0].toUpperCase(), 
+                style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold, fontSize: 20)),
             ),
-          ),
-        for (final e in filtered)
-          Card(
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: cs.secondaryContainer,
-                foregroundColor: cs.onSecondaryContainer,
-                child: Text(((e['name'] ?? 'E').toString()).substring(0, 1).toUpperCase()),
-              ),
-              title: Text((e['name'] ?? 'Unknown').toString()),
-              subtitle: Text(
-                'Age: ${e['age'] ?? '-'} • Gender: ${e['gender'] ?? '-'}\nLast check-in: ${e['last_check_in'] ?? '-'}',
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  IconButton(
-                    tooltip: 'Chat with family',
-                    onPressed: _chatBusy ? null : () => _openChatForElder(e),
-                    icon: const Icon(Icons.chat_bubble_outline),
+                  Text(name, style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('Age: ${e['age'] ?? '-'} • $gender', 
+                    style: tt.bodySmall?.copyWith(color: Colors.grey[600])),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.history, size: 14, color: cs.primary),
+                      const SizedBox(width: 4),
+                      Text('Check-in: $lastCheck', 
+                        style: tt.bodySmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w600)),
+                    ],
                   ),
-                  const Icon(Icons.chevron_right),
                 ],
               ),
-              onTap: () {
-                final id = int.tryParse(e['elder_id'].toString());
-                if (id == null) return;
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => ElderDetailPage(elderId: id)),
-                );
-              },
             ),
-          ),
-      ],
+            // ✅ Tooltip added for hover/long-press feedback
+            Tooltip(
+              message: "Chat with elder's family",
+              child: IconButton.filledTonal(
+                onPressed: _chatBusy ? null : () => _openChatForElder(e),
+                icon: _chatBusy 
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.chat_bubble_rounded, size: 18),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(ColorScheme cs, TextTheme tt) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.group_off_rounded, size: 64, color: cs.outline.withOpacity(0.5)),
+          const SizedBox(height: 16),
+          Text(_q.isEmpty ? 'No residents assigned yet.' : 'No matches found.', 
+            style: tt.bodyMedium?.copyWith(color: Colors.grey)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(ColorScheme cs, TextTheme tt) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: cs.error),
+          const SizedBox(height: 16),
+          Text('Failed to load residents', style: tt.titleMedium),
+          const SizedBox(height: 8),
+          TextButton(onPressed: _load, child: const Text('Retry Connection')),
+        ],
+      ),
     );
   }
 }

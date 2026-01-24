@@ -36,29 +36,21 @@ class _DashboardPageState extends State<DashboardPage> {
     });
 
     try {
-      // ✅ Using exact method names from your CaregiverApi class
       final results = await Future.wait([
         _caregiverApi.getMyProfile(),
         _paymentApi.getReceiverRevenue(),
-        _caregiverApi.getMyShiftHistory(limit: 100), // Updated endpoint name
-        _caregiverApi.getMyActiveShift(),           // Updated endpoint name
+        _caregiverApi.getMyShiftHistory(limit: 100),
+        _caregiverApi.getMyActiveShift(),
       ]);
       
       if (mounted) {
         setState(() {
           _profile = results[0] as Map<String, dynamic>;
-          
-          // 💰 Handle Revenue
           final revRes = results[1] as Map<String, dynamic>;
           _totalRevenue = double.tryParse(revRes['receiver_revenue']?.toString() ?? '0.0') ?? 0.0;
-          
-          // 🕒 Handle Shift History (Count only completed ones)
           final historyList = results[2] as List<dynamic>;
           _totalCompletedShifts = historyList.where((s) => s['shift_end'] != null).length;
-          
-          // 🟢 Handle Current Active Shift
           _activeShift = results[3] as Map<String, dynamic>?; 
-          
           _loading = false;
         });
       }
@@ -72,10 +64,9 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  // ✅ FIXED: Switches tabs in the parent Layout instead of pushing a new Route
   void _goTab(int index) {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => CaregiverLayout(initialIndex: index)),
-    );
+    CaregiverLayout.of(context)?.setIndex(index);
   }
 
   @override
@@ -96,10 +87,8 @@ class _DashboardPageState extends State<DashboardPage> {
         children: [
           _buildHeroHeader(name, isOnShift, cs, tt),
           const SizedBox(height: 24),
-
           _buildMetricsRow(cs, tt),
           const SizedBox(height: 24),
-
           Text('Navigation Hub', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           GridView.count(
@@ -117,7 +106,6 @@ class _DashboardPageState extends State<DashboardPage> {
             ],
           ),
           const SizedBox(height: 16),
-          
           _FullWidthAction(
             icon: Icons.history_rounded,
             label: "View All Shift History",
@@ -181,19 +169,9 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildMetricsRow(ColorScheme cs, TextTheme tt) {
     return Row(
       children: [
-        _MetricCard(
-          label: "Total Completed", 
-          value: "$_totalCompletedShifts Shifts", 
-          icon: Icons.task_alt_rounded, 
-          color: cs.primary
-        ),
+        _MetricCard(label: "Total Completed", value: "$_totalCompletedShifts Shifts", icon: Icons.task_alt_rounded, color: cs.primary),
         const SizedBox(width: 12),
-        _MetricCard(
-          label: "Total Earnings", 
-          value: "\$${_totalRevenue.toStringAsFixed(2)}", 
-          icon: Icons.account_balance_wallet, 
-          color: Colors.green
-        ),
+        _MetricCard(label: "Total Earnings", value: "\$${_totalRevenue.toStringAsFixed(2)}", icon: Icons.account_balance_wallet, color: Colors.green),
       ],
     );
   }
@@ -213,8 +191,6 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 
-// --- Supporting UI Components ---
-
 class _StatusPill extends StatelessWidget {
   final bool isOnShift;
   const _StatusPill({required this.isOnShift});
@@ -226,12 +202,7 @@ class _StatusPill extends StatelessWidget {
       decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(12)),
       child: Text(
         isOnShift ? "ON SHIFT" : "OFF DUTY", 
-        style: TextStyle(
-          color: isOnShift ? Colors.black87 : Colors.white, 
-          fontSize: 10, 
-          fontWeight: FontWeight.bold, 
-          letterSpacing: 1
-        )
+        style: TextStyle(color: isOnShift ? Colors.black87 : Colors.white, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)
       ),
     );
   }

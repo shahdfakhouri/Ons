@@ -1,8 +1,4 @@
-// =======================
-// FamilyLayout (FINAL)
-// =======================
 import 'package:flutter/material.dart';
-
 import 'package:ons_app/services/auth_service.dart';
 import 'package:ons_app/screens/auth/login_page.dart';
 
@@ -15,7 +11,6 @@ import 'pages/calendar/calendar_page.dart';
 import 'pages/calls/calls_page.dart';
 import 'pages/notifications/notifications_page.dart';
 import 'pages/payments/family_payments_page.dart';
-
 import 'package:ons_app/screens/chat_h2h/conversations_page.dart';
 
 class FamilyLayout extends StatefulWidget {
@@ -30,134 +25,111 @@ class _FamilyLayoutState extends State<FamilyLayout> {
 
   void _goTo(int i) => setState(() => _index = i);
 
-  void _logout(BuildContext context) {
-    AuthService().logout();
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => false,
-    );
-  }
+  static const _titles = [
+    'Peace of Mind', 'Inbox', 'Messages', 'My Elders', 'Smart Matching', 
+    'Safety Alerts', 'Schedule', 'Voice Calls', 'Payments', 'My Profile'
+  ];
 
   late final List<Widget> _pages = [
-    FamilyDashboardPage(onNavigate: _goTo),     // 0
-    const FamilyNotificationsPage(),            // 1
-    const ChatH2HConversationsPage(),           // 2 ✅ Chats
-    const EldersListPage(),                     // 3
-    const MatchPage(),                          // 4
-    const AlertsPage(),                         // 5
-    const CalendarPage(),                       // 6
-    const CallsPage(),                          // 7
-    const FamilyPaymentsPage(),                 // 8
-    const FamilyProfilePage(),                  // 9
+    FamilyDashboardPage(onNavigate: _goTo),
+    const FamilyNotificationsPage(),
+    const ChatH2HConversationsPage(),
+    const EldersListPage(),
+    const MatchPage(),
+    const AlertsPage(),
+    const CalendarPage(),
+    const CallsPage(),
+    const FamilyPaymentsPage(),
+    const FamilyProfilePage(),
   ];
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    final isWide = width >= 900;
+    final cs = Theme.of(context).colorScheme;
+    final isWide = MediaQuery.sizeOf(context).width >= 900;
 
-    AppBar topBar() => AppBar(
-          title: const Text('Family'),
+    return PopScope(
+      canPop: _index == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _goTo(0);
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF9F9F4), // Ons Cream
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          centerTitle: false,
+          title: Text(_titles[_index], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           actions: [
-            TextButton.icon(
-              onPressed: () => _logout(context),
-              icon: const Icon(Icons.logout, size: 18),
-              label: const Text('Logout'),
+            IconButton(
+              onPressed: () {
+                AuthService().logout();
+                Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginPage()), (r) => false);
+              },
+              icon: const Icon(Icons.logout_rounded, size: 20),
             ),
             const SizedBox(width: 8),
           ],
-        );
-
-    if (!isWide) {
-      return Scaffold(
-        appBar: topBar(),
-        body: IndexedStack(index: _index, children: _pages),
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _index,
-          onTap: _goTo,
-          type: BottomNavigationBarType.fixed,
-          items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Dash'),
-            BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'Inbox'),
-            BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Chats'),
-            BottomNavigationBarItem(icon: Icon(Icons.groups), label: 'Elders'),
-            BottomNavigationBarItem(icon: Icon(Icons.auto_awesome), label: 'Match'),
-            BottomNavigationBarItem(icon: Icon(Icons.warning_amber), label: 'Alerts'),
-            BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Calendar'),
-            BottomNavigationBarItem(icon: Icon(Icons.call), label: 'Calls'),
-            BottomNavigationBarItem(icon: Icon(Icons.payments_outlined), label: 'Payments'),
-            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          ],
         ),
-      );
-    }
-
-    return Scaffold(
-      appBar: topBar(),
-      body: Row(
-        children: [
-          NavigationRail(
-            selectedIndex: _index,
-            onDestinationSelected: _goTo,
-            labelType: NavigationRailLabelType.all,
-            minWidth: 86,
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: Text('Dash'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.notifications_outlined),
-                selectedIcon: Icon(Icons.notifications),
-                label: Text('Inbox'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.chat_bubble_outline),
-                selectedIcon: Icon(Icons.chat_bubble),
-                label: Text('Chats'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.groups_outlined),
-                selectedIcon: Icon(Icons.groups),
-                label: Text('Elders'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.auto_awesome_outlined),
-                selectedIcon: Icon(Icons.auto_awesome),
-                label: Text('Match'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.warning_amber_outlined),
-                selectedIcon: Icon(Icons.warning_amber),
-                label: Text('Alerts'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.calendar_month_outlined),
-                selectedIcon: Icon(Icons.calendar_month),
-                label: Text('Calendar'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.call_outlined),
-                selectedIcon: Icon(Icons.call),
-                label: Text('Calls'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.payments_outlined),
-                selectedIcon: Icon(Icons.payments),
-                label: Text('Payments'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.person_outline),
-                selectedIcon: Icon(Icons.person),
-                label: Text('Profile'),
-              ),
-            ],
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(child: IndexedStack(index: _index, children: _pages)),
-        ],
+        body: isWide ? _buildWideLayout(cs) : IndexedStack(index: _index, children: _pages),
+        bottomNavigationBar: isWide ? null : _buildBottomBar(cs),
       ),
     );
+  }
+
+  Widget _buildBottomBar(ColorScheme cs) {
+    return NavigationBar(
+      selectedIndex: _index,
+      onDestinationSelected: _goTo,
+      height: 70,
+      backgroundColor: Colors.white,
+      indicatorColor: cs.primaryContainer,
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysHide, // Cleaner look for 10 items
+      destinations: const [
+        NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Dash'),
+        NavigationDestination(icon: Icon(Icons.notifications_outlined), label: 'Inbox'),
+        NavigationDestination(icon: Icon(Icons.chat_bubble_outline), label: 'Chats'),
+        NavigationDestination(icon: Icon(Icons.groups_outlined), label: 'Elders'),
+        NavigationDestination(icon: Icon(Icons.auto_awesome_outlined), label: 'Match'),
+        NavigationDestination(icon: Icon(Icons.warning_amber_outlined), label: 'Alerts'),
+        NavigationDestination(icon: Icon(Icons.calendar_month_outlined), label: 'Calendar'),
+        NavigationDestination(icon: Icon(Icons.call_outlined), label: 'Calls'),
+        NavigationDestination(icon: Icon(Icons.payments_outlined), label: 'Pay'),
+        NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
+      ],
+    );
+  }
+
+  Widget _buildWideLayout(ColorScheme cs) {
+    return Row(
+      children: [
+        NavigationRail(
+          selectedIndex: _index,
+          onDestinationSelected: _goTo,
+          labelType: NavigationRailLabelType.all,
+          backgroundColor: Colors.white,
+          indicatorColor: cs.primaryContainer,
+          destinations: _buildRailDestinations(),
+        ),
+        const VerticalDivider(width: 1),
+        Expanded(child: IndexedStack(index: _index, children: _pages)),
+      ],
+    );
+  }
+
+  List<NavigationRailDestination> _buildRailDestinations() {
+    return const [
+       NavigationRailDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: Text('Home')),
+       NavigationRailDestination(icon: Icon(Icons.notifications_outlined), label: Text('Inbox')),
+       NavigationRailDestination(icon: Icon(Icons.chat_bubble_outline), label: Text('Chats')),
+       NavigationRailDestination(icon: Icon(Icons.groups_outlined), label: Text('Elders')),
+       NavigationRailDestination(icon: Icon(Icons.auto_awesome_outlined), label: Text('Match')),
+       NavigationRailDestination(icon: Icon(Icons.warning_amber_outlined), label: Text('Alerts')),
+       NavigationRailDestination(icon: Icon(Icons.calendar_month_outlined), label: Text('Calendar')),
+       NavigationRailDestination(icon: Icon(Icons.call_outlined), label: Text('Calls')),
+       NavigationRailDestination(icon: Icon(Icons.payments_outlined), label: Text('Payments')),
+       NavigationRailDestination(icon: Icon(Icons.person_outline), label: Text('Profile')),
+    ];
   }
 }

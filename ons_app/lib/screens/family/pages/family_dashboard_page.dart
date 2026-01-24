@@ -12,78 +12,100 @@ class FamilyDashboardPage extends StatefulWidget {
 
 class _FamilyDashboardPageState extends State<FamilyDashboardPage> {
   final api = FamilyApi();
-  Future<void> _reload() async => setState(() {});
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Family Dashboard'),
-        actions: [IconButton(onPressed: _reload, icon: const Icon(Icons.refresh))],
-      ),
-      body: FutureBuilder(
-        future: api.getDashboard(),
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snap.hasError) return Center(child: Text('Error: ${snap.error}'));
+      backgroundColor: const Color(0xFFF9F9F4),
+      body: RefreshIndicator(
+        onRefresh: () async => setState(() {}),
+        child: FutureBuilder(
+          future: api.getDashboard(),
+          builder: (context, snap) {
+            if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+            
+            final data = snap.data as Map<String, dynamic>;
+            final msg = data['msg'] ?? 'Welcome Back';
 
-          final data = (snap.data as Map<String, dynamic>? ?? {});
-          final msg = (data['msg'] ?? 'Welcome 👋').toString();
-
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Card(
-                child: ListTile(
-                  leading: const CircleAvatar(child: Icon(Icons.home)),
-                  title: Text(msg, style: const TextStyle(fontWeight: FontWeight.w800)),
-                  subtitle: const Text('Use the tabs to manage elders, matching, monitoring and more.'),
+            return ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                // 🟢 HERO WELCOME CARD
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: cs.primary,
+                    borderRadius: BorderRadius.circular(32),
+                    boxShadow: [BoxShadow(color: cs.primary.withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 8))],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const CircleAvatar(backgroundColor: Colors.white24, child: Icon(Icons.favorite, color: Colors.white)),
+                      const SizedBox(height: 20),
+                      Text(msg, style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      const Text("Everything is on track with your loved ones today.", 
+                        style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 14),
-              const SectionTitle('Quick actions'),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-               children: [
-  ActionChip(
-    avatar: const Icon(Icons.groups, size: 18),
-    label: const Text('Elders'),
-    onPressed: () => widget.onNavigate(2),
-  ),
-  ActionChip(
-    avatar: const Icon(Icons.auto_awesome, size: 18),
-    label: const Text('Match'),
-    onPressed: () => widget.onNavigate(3),
-  ),
-  ActionChip(
-    avatar: const Icon(Icons.warning_amber, size: 18),
-    label: const Text('Alerts'),
-    onPressed: () => widget.onNavigate(4),
-  ),
-  ActionChip(
-    avatar: const Icon(Icons.calendar_month, size: 18),
-    label: const Text('Calendar'),
-    onPressed: () => widget.onNavigate(5),
-  ),
-  ActionChip(
-    avatar: const Icon(Icons.call, size: 18),
-    label: const Text('Calls'),
-    onPressed: () => widget.onNavigate(6),
-  ),
-  ActionChip(
-    avatar: const Icon(Icons.person, size: 18),
-    label: const Text('Profile'),
-    onPressed: () => widget.onNavigate(7),
-  ),
-],
+                
+                const SizedBox(height: 32),
+                const SectionTitle('Quick Management'),
+                const SizedBox(height: 16),
+                
+                // 🛠️ GRID ACTIONS
+                GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  childAspectRatio: 1.2,
+                  children: [
+                    _QuickActionCard(icon: Icons.groups, label: 'Elders', color: Colors.indigo, onTap: () => widget.onNavigate(3)),
+                    _QuickActionCard(icon: Icons.chat_bubble, label: 'Messages', color: Colors.blue, onTap: () => widget.onNavigate(2)),
+                    _QuickActionCard(icon: Icons.warning_amber_rounded, label: 'Alerts', color: Colors.redAccent, onTap: () => widget.onNavigate(5)),
+                    _QuickActionCard(icon: Icons.payments, label: 'Payments', color: Colors.green, onTap: () => widget.onNavigate(8)),
+                    _QuickActionCard(icon: Icons.calendar_month, label: 'Schedule', color: Colors.orange, onTap: () => widget.onNavigate(6)),
+                    _QuickActionCard(icon: Icons.person, label: 'Profile', color: Colors.blueGrey, onTap: () => widget.onNavigate(9)),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
 
-              ),
-            ],
-          );
-        },
+class _QuickActionCard extends StatelessWidget {
+  final IconData icon; final String label; final Color color; final VoidCallback onTap;
+  const _QuickActionCard({required this.icon, required this.label, required this.color, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+              child: Icon(icon, color: color, size: 26),
+            ),
+            const SizedBox(height: 12),
+            Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          ],
+        ),
       ),
     );
   }

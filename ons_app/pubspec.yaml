@@ -5,7 +5,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.9.2
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -22,13 +22,13 @@ dependencies:
   firebase_core: ^3.0.0
   firebase_messaging: ^15.0.0
   jwt_decoder: ^2.0.1
-
-  
+  geolocator: ^13.0.1 # Removed the extra "dependencies:" line here
+  google_maps_flutter: ^2.10.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^6.0.0
+  flutter_lints: ^5.0.0 # Updated to 5.0.0 for better Dart 3 compatibility
 
 flutter:
   uses-material-design: true

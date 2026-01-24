@@ -4,6 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   firebase_core
+  geolocator_windows
   pdfx
   url_launcher_windows
 )

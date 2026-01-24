@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:ons_app/services/caregiver_api.dart';
+import 'package:geolocator/geolocator.dart'; // ✅ Package integrated
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class ElderDetailPage extends StatefulWidget {
   final int elderId;
@@ -18,7 +20,9 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
 
   void _snack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+    );
   }
 
   Future<Map<String, dynamic>> _loadOverview() async {
@@ -27,7 +31,67 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
     return {'elder': elder, 'status': status};
   }
 
-  // ---------------- Dialogs ----------------
+  String _fmtDate(dynamic v) {
+    if (v == null) return '-';
+    try {
+      final dt = DateTime.parse(v.toString()).toLocal();
+      return DateFormat('MMM d, h:mm a').format(dt);
+    } catch (_) {
+      return v.toString();
+    }
+  }
+
+  // ---------------- Automated Location Logic ----------------
+
+  Future<void> _handleUpdateLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    // 1. Check if location services are enabled
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      _snack('Location services are disabled. Please enable GPS.');
+      return;
+    }
+
+    // 2. Handle permissions
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        _snack('Location permissions are denied');
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      _snack('Location permissions are permanently denied. Check settings.');
+      return;
+    }
+
+    _snack('Fetching current GPS coordinates...');
+
+    try {
+      // 3. Get actual position
+      Position pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high
+      );
+
+      // 4. Send to API
+      await _api.updateElderLocation(
+        widget.elderId, 
+        latitude: pos.latitude, 
+        longitude: pos.longitude
+      );
+
+      _snack('Location verified & saved ✅');
+      _refreshAll(); 
+    } catch (e) {
+      _snack('Error capturing location: $e');
+    }
+  }
+
+  // ---------------- Dialog Handlers ----------------
 
   Future<void> _dialogAddHealthLog() async {
     final bp = TextEditingController();
@@ -57,9 +121,7 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
         ],
       ),
     );
-
     if (ok != true) return;
-
     try {
       await _api.logElderHealth(widget.elderId, {
         'blood_pressure': bp.text.trim().isEmpty ? null : bp.text.trim(),
@@ -70,9 +132,7 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
       });
       _snack('Health log saved ✅');
       _refreshAll();
-    } catch (e) {
-      _snack('Failed: $e');
-    }
+    } catch (e) { _snack('Failed: $e'); }
   }
 
   Future<void> _dialogEditDailySummary(Map<String, dynamic>? existing) async {
@@ -118,9 +178,7 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
         ],
       ),
     );
-
     if (ok != true) return;
-
     try {
       final sleepNum = double.tryParse(sleep.text.trim());
       await _api.upsertDailySummary(widget.elderId, {
@@ -133,9 +191,7 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
       });
       _snack('Daily summary saved ✅');
       _refreshAll();
-    } catch (e) {
-      _snack('Failed: $e');
-    }
+    } catch (e) { _snack('Failed: $e'); }
   }
 
   Future<void> _dialogCreateIncident() async {
@@ -143,7 +199,7 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
     final severity = ValueNotifier<String>('medium');
     final title = TextEditingController();
     final desc = TextEditingController();
-    final occurredAt = TextEditingController(); // optional
+    final occurredAt = TextEditingController();
 
     final ok = await showDialog<bool>(
       context: context,
@@ -169,13 +225,7 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
                 ),
               ),
               TextField(controller: desc, decoration: const InputDecoration(labelText: 'Description'), maxLines: 3),
-              TextField(
-                controller: occurredAt,
-                decoration: const InputDecoration(
-                  labelText: 'Occurred at (optional)',
-                  hintText: 'YYYY-MM-DD HH:mm:ss',
-                ),
-              ),
+              TextField(controller: occurredAt, decoration: const InputDecoration(labelText: 'Occurred at (YYYY-MM-DD HH:mm:ss)')),
             ],
           ),
         ),
@@ -185,9 +235,7 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
         ],
       ),
     );
-
     if (ok != true) return;
-
     try {
       await _api.createIncident(widget.elderId, {
         'type': type.text.trim().isEmpty ? null : type.text.trim(),
@@ -198,56 +246,14 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
       });
       _snack('Incident created ✅');
       _refreshAll();
-    } catch (e) {
-      _snack('Failed: $e');
-    }
-  }
-
-  Future<void> _dialogAddLocation() async {
-    final lat = TextEditingController();
-    final lng = TextEditingController();
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add location'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: lat, decoration: const InputDecoration(labelText: 'Latitude')),
-            TextField(controller: lng, decoration: const InputDecoration(labelText: 'Longitude')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
-        ],
-      ),
-    );
-
-    if (ok != true) return;
-
-    final dLat = double.tryParse(lat.text.trim());
-    final dLng = double.tryParse(lng.text.trim());
-    if (dLat == null || dLng == null) {
-      _snack('Invalid lat/long');
-      return;
-    }
-
-    try {
-      await _api.updateElderLocation(widget.elderId, latitude: dLat, longitude: dLng);
-      _snack('Location saved ✅');
-      _refreshAll();
-    } catch (e) {
-      _snack('Failed: $e');
-    }
+    } catch (e) { _snack('Failed: $e'); }
   }
 
   Future<void> _dialogRequestVisit() async {
     final scheduledAt = TextEditingController();
     final duration = TextEditingController(text: '30');
     final notes = TextEditingController();
-    final familyId = TextEditingController(); // optional
+    final familyId = TextEditingController();
 
     final ok = await showDialog<bool>(
       context: context,
@@ -256,13 +262,7 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
         content: SingleChildScrollView(
           child: Column(
             children: [
-              TextField(
-                controller: scheduledAt,
-                decoration: const InputDecoration(
-                  labelText: 'Scheduled at',
-                  hintText: 'YYYY-MM-DD HH:mm:ss',
-                ),
-              ),
+              TextField(controller: scheduledAt, decoration: const InputDecoration(labelText: 'Scheduled at (YYYY-MM-DD HH:mm:ss)')),
               TextField(controller: duration, decoration: const InputDecoration(labelText: 'Duration minutes')),
               TextField(controller: familyId, decoration: const InputDecoration(labelText: 'Family ID (optional)')),
               TextField(controller: notes, decoration: const InputDecoration(labelText: 'Notes'), maxLines: 3),
@@ -275,15 +275,9 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
         ],
       ),
     );
-
     if (ok != true) return;
-
     final dur = int.tryParse(duration.text.trim());
-    if (scheduledAt.text.trim().isEmpty || dur == null) {
-      _snack('scheduled_at and duration are required');
-      return;
-    }
-
+    if (scheduledAt.text.trim().isEmpty || dur == null) { _snack('Missing required fields'); return; }
     try {
       final body = <String, dynamic>{
         'scheduled_at': scheduledAt.text.trim(),
@@ -292,252 +286,127 @@ class _ElderDetailPageState extends State<ElderDetailPage> {
       };
       final fam = int.tryParse(familyId.text.trim());
       if (fam != null) body['family_id'] = fam;
-
       await _api.requestVisit(widget.elderId, body);
-      _snack('Visit requested ✅ (pending approval)');
+      _snack('Visit requested ✅');
       _refreshAll();
-    } catch (e) {
-      _snack('Failed: $e');
-    }
-  }
-
-  // ---------------- UI helpers ----------------
-
-  Widget _errorCard(String title, Object err, VoidCallback retry) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(err.toString(), style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 12),
-            FilledButton(onPressed: retry, child: const Text('Retry')),
-          ],
-        ),
-      ),
-    );
-  }
-
-  String _fmtDate(dynamic v) {
-    if (v == null) return '-';
-    try {
-      final dt = DateTime.parse(v.toString());
-      return DateFormat('yyyy-MM-dd HH:mm').format(dt);
-    } catch (_) {
-      return v.toString();
-    }
+    } catch (e) { _snack('Failed: $e'); }
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
 
     return DefaultTabController(
       length: 9,
       child: Scaffold(
+        backgroundColor: const Color(0xFFF9F9F4),
         appBar: AppBar(
-          title: Text('Elder #${widget.elderId}'),
-          bottom: const TabBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          title: Text('Elder Profile', style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          actions: [
+            IconButton(onPressed: _refreshAll, icon: const Icon(Icons.sync_rounded)),
+          ],
+          bottom: TabBar(
             isScrollable: true,
-            tabs: [
-              Tab(text: 'Overview'),
-              Tab(text: 'Health'),
-              Tab(text: 'Meds'),
-              Tab(text: 'Summary'),
-              Tab(text: 'Incidents'),
-              Tab(text: 'Location'),
-              Tab(text: 'Visits'),
-              Tab(text: 'Family'),
-              Tab(text: 'Alerts'),
+            tabAlignment: TabAlignment.start,
+            indicatorColor: cs.primary,
+            labelColor: cs.primary,
+            unselectedLabelColor: Colors.grey,
+            labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            tabs: const [
+              Tab(text: 'Overview'), Tab(text: 'Health'), Tab(text: 'Meds'),
+              Tab(text: 'Summary'), Tab(text: 'Incidents'), Tab(text: 'Location'),
+              Tab(text: 'Visits'), Tab(text: 'Family'), Tab(text: 'Alerts'),
             ],
           ),
-          actions: [
-            IconButton(
-              tooltip: 'Refresh',
-              onPressed: _refreshAll,
-              icon: const Icon(Icons.refresh),
-            )
-          ],
         ),
         body: TabBarView(
           children: [
-            // 1) Overview
-            FutureBuilder<Map<String, dynamic>>(
-              key: ValueKey('overview_$_reload'),
-              future: _loadOverview(),
-              builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return Center(child: _errorCard('Failed to load overview', snap.error!, _refreshAll));
-                }
-
-                final elder = (snap.data?['elder'] as Map<String, dynamic>?) ?? {};
-                final status = (snap.data?['status'] as Map<String, dynamic>?) ?? {};
-
-                return ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor: cs.secondaryContainer,
-                              foregroundColor: cs.onSecondaryContainer,
-                              child: Text(((elder['name'] ?? 'E').toString()).substring(0, 1).toUpperCase()),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text((elder['name'] ?? 'Unknown').toString(),
-                                      style: Theme.of(context).textTheme.titleLarge),
-                                  const SizedBox(height: 6),
-                                  Text('Age: ${elder['age'] ?? '-'} • Gender: ${elder['gender'] ?? '-'}'),
-                                  Text('Last check-in: ${_fmtDate(elder['last_check_in'])}'),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Status', style: Theme.of(context).textTheme.titleMedium),
-                            const SizedBox(height: 8),
-                            Text('Last check-in time: ${_fmtDate(status['last_checkin_time'])}'),
-                            const SizedBox(height: 12),
-                            FilledButton.icon(
-                              onPressed: () async {
-                                try {
-                                  await _api.checkInElder(widget.elderId);
-                                  _snack('Check-in saved ✅');
-                                  _refreshAll();
-                                } catch (e) {
-                                  _snack('Failed: $e');
-                                }
-                              },
-                              icon: const Icon(Icons.check_circle_outline),
-                              label: const Text('Check-in now'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-
-            // 2) Health
+            _buildOverviewTab(cs, tt),
             _HealthTab(elderId: widget.elderId, reload: _reload, api: _api, onAdd: _dialogAddHealthLog, fmt: _fmtDate),
-
-            // 3) Medications
-_MedsTab(
-  elderId: widget.elderId,
-  reload: _reload,
-  api: _api,
-  fmt: _fmtDate,
-  onChanged: _refreshAll,
-),
-
-            // 4) Summary
+            _MedsTab(elderId: widget.elderId, reload: _reload, api: _api, fmt: _fmtDate, onChanged: _refreshAll),
             _SummaryTab(elderId: widget.elderId, reload: _reload, api: _api, onEdit: _dialogEditDailySummary),
-
-            // 5) Incidents
-            _IncidentsTab(reload: _reload, onCreate: _dialogCreateIncident),
-
-            // 6) Location
-            _LocationTab(elderId: widget.elderId, reload: _reload, api: _api, onAdd: _dialogAddLocation, fmt: _fmtDate),
-
-            // 7) Visits
+            _IncidentsTab(elderId: widget.elderId, reload: _reload, api: _api, fmt: _fmtDate, onCreate: _dialogCreateIncident),
+            _LocationTab(elderId: widget.elderId, reload: _reload, api: _api, onUpdate: _handleUpdateLocation, fmt: _fmtDate),
             _VisitsTab(elderId: widget.elderId, reload: _reload, api: _api, onRequest: _dialogRequestVisit, fmt: _fmtDate),
-
-            // 8) Family
             _FamilyTab(elderId: widget.elderId, reload: _reload, api: _api),
-
-            // 9) Alerts
             _AlertsTab(elderId: widget.elderId, reload: _reload, api: _api, fmt: _fmtDate),
           ],
         ),
       ),
     );
   }
-}
 
-// ---------------- Tabs widgets (kept in same file) ----------------
-
-class _HealthTab extends StatefulWidget {
-  final int elderId;
-  final int reload;
-  final CaregiverApi api;
-  final Future<void> Function() onAdd;
-  final String Function(dynamic) fmt;
-
-  const _HealthTab({
-    required this.elderId,
-    required this.reload,
-    required this.api,
-    required this.onAdd,
-    required this.fmt,
-  });
-
-  @override
-  State<_HealthTab> createState() => _HealthTabState();
-}
-
-class _HealthTabState extends State<_HealthTab> {
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      key: ValueKey('health_${widget.reload}'),
-      future: widget.api.getElderHealthLogs(widget.elderId),
+  Widget _buildOverviewTab(ColorScheme cs, TextTheme tt) {
+    return FutureBuilder<Map<String, dynamic>>(
+      key: ValueKey('overview_$_reload'),
+      future: _loadOverview(),
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snap.hasError) {
-          return Center(child: Text('Failed: ${snap.error}'));
-        }
-        final logs = snap.data ?? [];
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final elder = snap.data!['elder'] ?? {};
+        final status = snap.data!['status'] ?? {};
+        final name = elder['name'] ?? 'Resident';
+
         return ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           children: [
-            Row(
-              children: [
-                Expanded(child: Text('Health logs', style: Theme.of(context).textTheme.titleMedium)),
-                FilledButton.icon(
-                  onPressed: widget.onAdd,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (logs.isEmpty)
-              const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No health logs yet.'))),
-            for (final l in logs)
-              Card(
-                child: ListTile(
-                  title: Text(widget.fmt(l['date'])),
-                  subtitle: Text(
-                    'BP: ${l['blood_pressure'] ?? '-'} | Sugar: ${l['blood_sugar'] ?? '-'} | Temp: ${l['temperature'] ?? '-'}\nNotes: ${l['notes'] ?? '-'}',
-                  ),
-                ),
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10)],
               ),
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: cs.primaryContainer,
+                    child: Text(name[0].toUpperCase(), style: tt.headlineMedium?.copyWith(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(name, style: tt.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                  Text('Age: ${elder['age'] ?? '-'} • ${elder['gender'] ?? '-'}', style: tt.bodyMedium?.copyWith(color: Colors.grey)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                      const SizedBox(width: 8),
+                      const Text('Last Check-in', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(_fmtDate(status['last_checkin_time']), style: tt.bodyLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        try {
+                          await _api.checkInElder(widget.elderId);
+                          _snack('Check-in saved ✅');
+                          _refreshAll();
+                        } catch (e) { _snack('Failed: $e'); }
+                      },
+                      icon: const Icon(Icons.touch_app),
+                      label: const Text('Perform Check-in Now'),
+                    ),
+                  )
+                ],
+              ),
+            ),
           ],
         );
       },
@@ -545,280 +414,165 @@ class _HealthTabState extends State<_HealthTab> {
   }
 }
 
+// ---------------- Tabs widgets (Optimized) ----------------
+
+class _HealthTab extends StatelessWidget {
+  final int elderId, reload;
+  final CaregiverApi api;
+  final Future<void> Function() onAdd;
+  final String Function(dynamic) fmt;
+  const _HealthTab({required this.elderId, required this.reload, required this.api, required this.onAdd, required this.fmt});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      key: ValueKey('health_$reload'),
+      future: api.getElderHealthLogs(elderId),
+      builder: (context, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final logs = snap.data!;
+        return ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Health Logs', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                IconButton.filledTonal(onPressed: onAdd, icon: const Icon(Icons.add)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (logs.isEmpty) const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No logs recorded.'))),
+            ...logs.map((l) => Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(fmt(l['date']), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12)),
+                  const Divider(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _vital(Icons.favorite, 'BP', l['blood_pressure'], Colors.red),
+                      _vital(Icons.water_drop, 'Sugar', l['blood_sugar'], Colors.orange),
+                      _vital(Icons.thermostat, 'Temp', l['temperature'], Colors.blue),
+                      _vital(Icons.monitor_heart, 'HR', l['heart_rate'], Colors.green),
+                    ],
+                  ),
+                  if (l['notes'] != null) Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(l['notes'], style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.black54)),
+                  )
+                ],
+              ),
+            )),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _vital(IconData icon, String label, dynamic val, Color color) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 18),
+        Text(label, style: const TextStyle(fontSize: 10)),
+        Text(val?.toString() ?? '-', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+      ],
+    );
+  }
+}
+
 class _MedsTab extends StatefulWidget {
-  final int elderId;
-  final int reload;
+  final int elderId, reload;
   final CaregiverApi api;
   final String Function(dynamic) fmt;
   final VoidCallback onChanged;
-
-  const _MedsTab({
-    required this.elderId,
-    required this.reload,
-    required this.api,
-    required this.fmt,
-    required this.onChanged,
-  });
+  const _MedsTab({required this.elderId, required this.reload, required this.api, required this.fmt, required this.onChanged});
 
   @override
   State<_MedsTab> createState() => _MedsTabState();
 }
 
 class _MedsTabState extends State<_MedsTab> {
-  String? _date; // YYYY-MM-DD
-  int _days = 7;
-
-  void _snack(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-  }
-
-  Future<void> _logStatus(Map<String, dynamic> item, String status) async {
-    final notes = TextEditingController();
-    final scheduled = TextEditingController(text: (item['scheduled_time'] ?? '').toString());
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Mark as $status'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('${item['name'] ?? '-'} • ${item['dosage'] ?? '-'}'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: scheduled,
-              decoration: const InputDecoration(
-                labelText: 'Scheduled time (optional)',
-                hintText: 'YYYY-MM-DD HH:mm:ss',
-              ),
-            ),
-            TextField(
-              controller: notes,
-              decoration: const InputDecoration(labelText: 'Notes (optional)'),
-              maxLines: 3,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
-        ],
-      ),
-    );
-
-    if (ok != true) return;
-
-    final medId = int.tryParse((item['medication_id'] ?? '').toString());
-    if (medId == null) {
-      _snack('Missing medication_id from API response');
-      return;
-    }
-
-    try {
-      await widget.api.logMedicationStatus(
-        widget.elderId,
-        medicationId: medId,
-        status: status,
-        scheduledTime: scheduled.text.trim().isEmpty ? null : scheduled.text.trim(),
-        notes: notes.text.trim().isEmpty ? null : notes.text.trim(),
-      );
-      _snack('Medication logged ✅');
-      widget.onChanged();
-    } catch (e) {
-      _snack('Failed: $e');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       children: [
-        // Plan
-        Text('Medication plan', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
+        const Text('Medication Plan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        const SizedBox(height: 12),
         FutureBuilder<List<Map<String, dynamic>>>(
           key: ValueKey('plan_${widget.reload}'),
           future: widget.api.getElderMedicationPlan(widget.elderId),
           builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) return const LinearProgressIndicator();
-            if (snap.hasError) return Text('Failed: ${snap.error}');
-            final meds = snap.data ?? [];
-            if (meds.isEmpty) return const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No active meds.')));
-            return Column(
-              children: meds.map((m) {
-                return Card(
-                  child: ListTile(
-                    title: Text('${m['name'] ?? '-'} • ${m['dosage'] ?? '-'}'),
-                    subtitle: Text('Freq: ${m['frequency'] ?? '-'}\n${m['instructions'] ?? ''}'),
-                  ),
-                );
-              }).toList(),
-            );
+            if (!snap.hasData) return const LinearProgressIndicator();
+            final meds = snap.data!;
+            return Column(children: meds.map((m) => Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                title: Text('${m['name']} • ${m['dosage']}'),
+                subtitle: Text('Freq: ${m['frequency']}\nInstr: ${m['instructions'] ?? '-'}'),
+              ),
+            )).toList());
           },
         ),
-
-        const SizedBox(height: 16),
-
-        // Today checklist + ACTIONS ✅
-        Text('Today checklist', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
+        const SizedBox(height: 24),
+        const Text('Today Checklist', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        const SizedBox(height: 12),
         FutureBuilder<List<Map<String, dynamic>>>(
           key: ValueKey('check_${widget.reload}'),
           future: widget.api.getTodayMedicationChecklist(widget.elderId),
           builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) return const LinearProgressIndicator();
-            if (snap.hasError) return Text('Failed: ${snap.error}');
-            final list = snap.data ?? [];
-            if (list.isEmpty) return const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No checklist items.')));
-
-            return Column(
-              children: list.map((x) {
-                final status = (x['today_status'] ?? x['status'] ?? 'pending').toString();
-                return Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Column(
-                      children: [
-                        ListTile(
-                          title: Text('${x['name'] ?? '-'} • ${x['dosage'] ?? '-'}'),
-                          subtitle: Text('Status: $status • ${widget.fmt(x['today_taken_at'] ?? x['taken_at'])}'),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: FilledButton.icon(
-                                onPressed: () => _logStatus(x, 'taken'),
-                                icon: const Icon(Icons.check),
-                                label: const Text('Taken'),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => _logStatus(x, 'missed'),
-                                child: const Text('Missed'),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => _logStatus(x, 'skipped'),
-                                child: const Text('Skipped'),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                      ],
+            if (!snap.hasData) return const LinearProgressIndicator();
+            final list = snap.data!;
+            return Column(children: list.map((x) {
+              final status = (x['today_status'] ?? x['status'] ?? 'pending').toString();
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: Icon(status == 'taken' ? Icons.check_circle : Icons.pending, color: status == 'taken' ? Colors.green : Colors.orange),
+                      title: Text('${x['name']} • ${x['dosage']}'),
+                      subtitle: Text('Status: $status • ${widget.fmt(x['today_taken_at'] ?? x['taken_at'])}'),
                     ),
-                  ),
-                );
-              }).toList(),
-            );
-          },
-        ),
-
-        const SizedBox(height: 16),
-
-        // Logs filter
-        Row(
-          children: [
-            Expanded(child: Text('Medication logs', style: Theme.of(context).textTheme.titleMedium)),
-            TextButton(
-              onPressed: () async {
-                final now = DateTime.now();
-                final picked = await showDatePicker(
-                  context: context,
-                  firstDate: DateTime(now.year - 1),
-                  lastDate: DateTime(now.year + 1),
-                  initialDate: now,
-                );
-                if (picked == null) return;
-                setState(() => _date = DateFormat('yyyy-MM-dd').format(picked));
-              },
-              child: Text(_date == null ? 'Pick date' : _date!),
-            ),
-            if (_date != null)
-              IconButton(
-                tooltip: 'Clear',
-                onPressed: () => setState(() => _date = null),
-                icon: const Icon(Icons.clear),
-              ),
-          ],
-        ),
-        FutureBuilder<List<Map<String, dynamic>>>(
-          key: ValueKey('logs_${widget.reload}_${_date ?? 'all'}'),
-          future: widget.api.getMedicationLogs(widget.elderId, date: _date),
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) return const LinearProgressIndicator();
-            if (snap.hasError) return Text('Failed: ${snap.error}');
-            final logs = snap.data ?? [];
-            if (logs.isEmpty) return const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No logs.')));
-            return Column(
-              children: logs.map((l) {
-                return Card(
-                  child: ListTile(
-                    title: Text('${l['name'] ?? '-'} • ${l['dosage'] ?? '-'}'),
-                    subtitle: Text('Status: ${l['status'] ?? '-'} • Taken: ${widget.fmt(l['taken_at'])}\n${l['notes'] ?? ''}'),
-                  ),
-                );
-              }).toList(),
-            );
-          },
-        ),
-
-        const SizedBox(height: 16),
-
-        // Stats
-        Row(
-          children: [
-            Expanded(child: Text('Stats', style: Theme.of(context).textTheme.titleMedium)),
-            DropdownButton<int>(
-              value: _days,
-              items: const [
-                DropdownMenuItem(value: 7, child: Text('7 days')),
-                DropdownMenuItem(value: 14, child: Text('14 days')),
-                DropdownMenuItem(value: 30, child: Text('30 days')),
-                DropdownMenuItem(value: 60, child: Text('60 days')),
-              ],
-              onChanged: (v) => setState(() => _days = v ?? 7),
-            ),
-          ],
-        ),
-        FutureBuilder<Map<String, dynamic>>(
-          key: ValueKey('stats_${widget.reload}_$_days'),
-          future: widget.api.getMedicationStats(widget.elderId, days: _days),
-          builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) return const LinearProgressIndicator();
-            if (snap.hasError) return Text('Failed: ${snap.error}');
-            final data = snap.data ?? {};
-            final summary = (data['summary'] as Map?) ?? {};
-            return Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'Taken: ${summary['taken_count'] ?? 0} • Missed: ${summary['missed_count'] ?? 0} • '
-                  'Skipped: ${summary['skipped_count'] ?? 0}\nAdherence: ${summary['adherence_percent'] ?? '-'}%',
+                    if (status != 'taken') Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        TextButton(onPressed: () => _log(x, 'taken'), child: const Text('Taken')),
+                        TextButton(onPressed: () => _log(x, 'missed'), child: const Text('Missed', style: TextStyle(color: Colors.red))),
+                        TextButton(onPressed: () => _log(x, 'skipped'), child: const Text('Skipped', style: TextStyle(color: Colors.grey))),
+                      ],
+                    )
+                  ],
                 ),
-              ),
-            );
+              );
+            }).toList());
           },
         ),
       ],
     );
   }
+
+  Future<void> _log(Map<String, dynamic> item, String status) async {
+    final medId = int.tryParse(item['medication_id'].toString());
+    if (medId == null) return;
+    try {
+      await widget.api.logMedicationStatus(widget.elderId, medicationId: medId, status: status);
+      widget.onChanged();
+    } catch (e) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'))); }
+  }
 }
 
-
 class _SummaryTab extends StatelessWidget {
-  final int elderId;
-  final int reload;
+  final int elderId, reload;
   final CaregiverApi api;
   final Future<void> Function(Map<String, dynamic>? existing) onEdit;
-
   const _SummaryTab({required this.elderId, required this.reload, required this.api, required this.onEdit});
 
   @override
@@ -827,46 +581,35 @@ class _SummaryTab extends StatelessWidget {
       key: ValueKey('summary_$reload'),
       future: api.getDailySummary(elderId),
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snap.hasError) {
-          return Center(child: Text('Failed: ${snap.error}'));
-        }
-
+        if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
         final s = snap.data;
-
         return ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(child: Text('Today summary', style: Theme.of(context).textTheme.titleMedium)),
-                FilledButton.icon(
-                  onPressed: () => onEdit(s),
-                  icon: const Icon(Icons.edit),
-                  label: Text(s == null ? 'Create' : 'Edit'),
-                ),
+                const Text('Today Summary', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                FilledButton.icon(onPressed: () => onEdit(s), icon: const Icon(Icons.edit), label: Text(s == null ? 'Create' : 'Edit')),
               ],
             ),
             const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: s == null
-                    ? const Text('No summary for today yet.')
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Mood: ${s['mood'] ?? '-'}'),
-                          Text('Meals: ${s['meals'] ?? '-'}'),
-                          Text('Activities: ${s['activities'] ?? '-'}'),
-                          Text('Medication taken: ${s['medication_taken'] == 1 ? 'Yes' : s['medication_taken'] == 0 ? 'No' : 'Unknown'}'),
-                          Text('Sleep hours: ${s['sleep_hours'] ?? '-'}'),
-                          const SizedBox(height: 8),
-                          Text('Notes:\n${s['notes'] ?? '-'}'),
-                        ],
-                      ),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+              child: s == null ? const Text('No entry for today.') : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _summaryRow('Mood', s['mood']),
+                  _summaryRow('Meals', s['meals']),
+                  _summaryRow('Activities', s['activities']),
+                  _summaryRow('Medication', s['medication_taken'] == 1 ? 'Yes' : 'No'),
+                  _summaryRow('Sleep', '${s['sleep_hours'] ?? '-'} hrs'),
+                  const Divider(height: 32),
+                  const Text('Notes', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text(s['notes'] ?? '-', style: const TextStyle(color: Colors.black87)),
+                ],
               ),
             ),
           ],
@@ -874,87 +617,135 @@ class _SummaryTab extends StatelessWidget {
       },
     );
   }
-}
 
-class _IncidentsTab extends StatelessWidget {
-  final int reload;
-  final Future<void> Function() onCreate;
-
-  const _IncidentsTab({required this.reload, required this.onCreate});
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Row(
-          children: [
-            Expanded(child: Text('Incidents', style: Theme.of(context).textTheme.titleMedium)),
-            FilledButton.icon(onPressed: onCreate, icon: const Icon(Icons.add), label: const Text('Create')),
-          ],
-        ),
-        const SizedBox(height: 12),
-        const Card(
-          child: Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              'This tab creates a new incident for this elder.\n'
-              'For incident history/details, use the global Incidents page.',
-            ),
-          ),
-        ),
-      ],
+  Widget _summaryRow(String label, dynamic val) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(children: [
+        Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(val?.toString() ?? '-'),
+      ]),
     );
   }
 }
 
-class _LocationTab extends StatelessWidget {
-  final int elderId;
-  final int reload;
+class _IncidentsTab extends StatelessWidget {
+  final int elderId, reload;
   final CaregiverApi api;
-  final Future<void> Function() onAdd;
   final String Function(dynamic) fmt;
+  final Future<void> Function() onCreate;
 
-  const _LocationTab({
-    required this.elderId,
-    required this.reload,
-    required this.api,
-    required this.onAdd,
-    required this.fmt,
-  });
+  const _IncidentsTab({required this.elderId, required this.reload, required this.api, required this.fmt, required this.onCreate});
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      key: ValueKey('loc_$reload'),
-      future: api.getElderLocationHistory(elderId),
+      key: ValueKey('inc_$reload'),
+      future: api.getMyIncidents(),
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snap.hasError) return Center(child: Text('Failed: ${snap.error}'));
-
-        final items = snap.data ?? [];
+        if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+        final all = snap.data ?? [];
+        final incidents = all.where((x) => x['elder_id'] == elderId).toList();
 
         return ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(child: Text('Location history', style: Theme.of(context).textTheme.titleMedium)),
-                FilledButton.icon(onPressed: onAdd, icon: const Icon(Icons.add_location_alt_outlined), label: const Text('Add')),
+                const Text('Incidents', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                FilledButton.icon(onPressed: onCreate, icon: const Icon(Icons.add), label: const Text('Create')),
               ],
             ),
             const SizedBox(height: 12),
-            if (items.isEmpty)
-              const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No location history.'))),
-            for (final x in items)
-              Card(
-                child: ListTile(
-                  title: Text('${x['latitude'] ?? '-'}, ${x['longitude'] ?? '-'}'),
-                  subtitle: Text('Recorded: ${fmt(x['recorded_at'])}'),
+            if (incidents.isEmpty) const Card(child: Padding(padding: EdgeInsets.all(20), child: Text('No incidents recorded.'))),
+            ...incidents.map((i) => Card(
+              child: ListTile(
+                title: Text(i['title'] ?? 'Incident'),
+                subtitle: Text('Type: ${i['type']} • Severity: ${i['severity']} • Occurred: ${fmt(i['occurred_at'])}\n${i['description'] ?? ""}'),
+              ),
+            )),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _LocationTab extends StatefulWidget {
+  final int elderId, reload;
+  final CaregiverApi api;
+  final VoidCallback onUpdate;
+  final String Function(dynamic) fmt;
+
+  const _LocationTab({required this.elderId, required this.reload, required this.api, required this.onUpdate, required this.fmt});
+
+  @override
+  State<_LocationTab> createState() => _LocationTabState();
+}
+
+class _LocationTabState extends State<_LocationTab> {
+  // Default position if no history exists
+  LatLng _mapCenter = const LatLng(32.2240, 35.2616); 
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      key: ValueKey('loc_${widget.reload}'),
+      future: widget.api.getElderLocationHistory(widget.elderId),
+      builder: (context, snap) {
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final items = snap.data!;
+
+        // Update center to the latest recorded location if history exists
+        if (items.isNotEmpty) {
+          _mapCenter = LatLng(
+            double.parse(items.first['latitude'].toString()),
+            double.parse(items.first['longitude'].toString()),
+          );
+        }
+
+        return ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Row(
+              children: [
+                const Expanded(child: Text('Location History', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
+                FilledButton.icon(
+                  onPressed: widget.onUpdate,
+                  icon: const Icon(Icons.my_location_rounded),
+                  label: const Text('Verify My Location'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // 🗺️ THIS IS THE MISSING WIDGET
+            Container(
+              height: 300, // Important: Map must have a defined height on Web
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10)],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: GoogleMap(
+                  initialCameraPosition: CameraPosition(target: _mapCenter, zoom: 15),
+                  markers: {
+                    Marker(markerId: const MarkerId('current'), position: _mapCenter),
+                  },
                 ),
               ),
+            ),
+
+            const SizedBox(height: 20),
+            ...items.map((x) => Card(
+              child: ListTile(
+                leading: const Icon(Icons.location_on, color: Colors.redAccent),
+                title: Text('Lat: ${x['latitude']}, Lng: ${x['longitude']}'),
+                subtitle: Text('Recorded: ${widget.fmt(x['recorded_at'])}'),
+              ),
+            )),
           ],
         );
       },
@@ -963,19 +754,11 @@ class _LocationTab extends StatelessWidget {
 }
 
 class _VisitsTab extends StatelessWidget {
-  final int elderId;
-  final int reload;
+  final int elderId, reload;
   final CaregiverApi api;
   final Future<void> Function() onRequest;
   final String Function(dynamic) fmt;
-
-  const _VisitsTab({
-    required this.elderId,
-    required this.reload,
-    required this.api,
-    required this.onRequest,
-    required this.fmt,
-  });
+  const _VisitsTab({required this.elderId, required this.reload, required this.api, required this.onRequest, required this.fmt});
 
   @override
   Widget build(BuildContext context) {
@@ -983,30 +766,24 @@ class _VisitsTab extends StatelessWidget {
       key: ValueKey('vis_$reload'),
       future: api.getElderUpcomingVisits(elderId),
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-        if (snap.hasError) return Center(child: Text('Failed: ${snap.error}'));
-
-        final visits = snap.data ?? [];
-
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final visits = snap.data!;
         return ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(child: Text('Upcoming visits', style: Theme.of(context).textTheme.titleMedium)),
-                FilledButton.icon(onPressed: onRequest, icon: const Icon(Icons.add), label: const Text('Request')),
+                const Text('Upcoming Visits', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                FilledButton.icon(onPressed: onRequest, icon: const Icon(Icons.calendar_month), label: const Text('Request')),
               ],
             ),
             const SizedBox(height: 12),
-            if (visits.isEmpty)
-              const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No upcoming visits.'))),
-            for (final v in visits)
-              Card(
-                child: ListTile(
-                  title: Text('Scheduled: ${fmt(v['scheduled_at'])} • ${v['duration_minutes'] ?? '-'} min'),
-                  subtitle: Text('Status: ${v['status'] ?? '-'}\n${v['notes'] ?? ''}'),
-                ),
-              ),
+            if (visits.isEmpty) const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No upcoming visits.'))),
+            ...visits.map((v) => Card(child: ListTile(
+              title: Text('${fmt(v['scheduled_at'])} (${v['duration_minutes']} min)'),
+              subtitle: Text('Status: ${v['status']}\nNotes: ${v['notes'] ?? '-'}'),
+            ))),
           ],
         );
       },
@@ -1015,10 +792,8 @@ class _VisitsTab extends StatelessWidget {
 }
 
 class _FamilyTab extends StatelessWidget {
-  final int elderId;
-  final int reload;
+  final int elderId, reload;
   final CaregiverApi api;
-
   const _FamilyTab({required this.elderId, required this.reload, required this.api});
 
   @override
@@ -1027,26 +802,18 @@ class _FamilyTab extends StatelessWidget {
       key: ValueKey('fam_$reload'),
       future: api.getElderFamilyContacts(elderId),
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-        if (snap.hasError) return Center(child: Text('Failed: ${snap.error}'));
-
-        final fam = snap.data ?? [];
-
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final fam = snap.data!;
         return ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           children: [
-            Text('Family contacts', style: Theme.of(context).textTheme.titleMedium),
+            const Text('Family Contacts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 12),
-            if (fam.isEmpty)
-              const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No family contacts found.'))),
-            for (final f in fam)
-              Card(
-                child: ListTile(
-                  title: Text('${f['name'] ?? '-'} (${f['relation'] ?? '-'})'),
-                  subtitle: Text('Phone: ${f['phone'] ?? '-'}\nEmail: ${f['email'] ?? '-'}'),
-                  trailing: (f['is_primary'] == 1) ? const Icon(Icons.star, size: 18) : null,
-                ),
-              ),
+            ...fam.map((f) => Card(child: ListTile(
+              leading: Icon(f['is_primary'] == 1 ? Icons.star : Icons.person, color: f['is_primary'] == 1 ? Colors.orange : null),
+              title: Text('${f['name']} (${f['relation']})'),
+              subtitle: Text('Phone: ${f['phone']}\nEmail: ${f['email']}'),
+            ))),
           ],
         );
       },
@@ -1055,48 +822,31 @@ class _FamilyTab extends StatelessWidget {
 }
 
 class _AlertsTab extends StatelessWidget {
-  final int elderId;
-  final int reload;
+  final int elderId, reload;
   final CaregiverApi api;
   final String Function(dynamic) fmt;
-
   const _AlertsTab({required this.elderId, required this.reload, required this.api, required this.fmt});
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
     return FutureBuilder<List<Map<String, dynamic>>>(
       key: ValueKey('al_$reload'),
-      future: api.getElderAlerts(elderId),
+      future: api.getElderEmergencyRequests(elderId),
+
       builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-        if (snap.hasError) return Center(child: Text('Failed: ${snap.error}'));
-
-        final alerts = snap.data ?? [];
-
+        if (!snap.hasData) return const Center(child: CircularProgressIndicator());
+        final alerts = snap.data!;
         return ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           children: [
-            Text('Open alerts', style: Theme.of(context).textTheme.titleMedium),
+            const Text('Open Alerts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 12),
-            if (alerts.isEmpty)
-              const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('No open alerts.'))),
-            for (final a in alerts)
-              Card(
-                child: ListTile(
-                  title: Text((a['message'] ?? '').toString().isEmpty ? 'Alert' : (a['message'] ?? 'Alert').toString()),
-                  subtitle: Text('Type: ${a['type'] ?? '-'} • Created: ${fmt(a['created_at'])}'),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: cs.outlineVariant),
-                    ),
-                    child: Text((a['severity'] ?? 'medium').toString(), style: Theme.of(context).textTheme.bodySmall),
-                  ),
-                ),
-              ),
+            if (alerts.isEmpty) const Center(child: Padding(padding: EdgeInsets.all(20), child: Text('No active alerts.'))),
+            ...alerts.map((a) => Card(child: ListTile(
+              title: Text(a['message'] ?? 'Alert'),
+              subtitle: Text('Type: ${a['type']} • Created: ${fmt(a['created_at'])}'),
+              trailing: Chip(label: Text(a['severity'].toString().toUpperCase(), style: const TextStyle(fontSize: 10))),
+            ))),
           ],
         );
       },

@@ -12,18 +12,11 @@ class ChatH2HConversationsPage extends StatefulWidget {
 
 class _ChatH2HConversationsPageState extends State<ChatH2HConversationsPage> {
   final api = ChatH2HApi();
-
   bool loading = true;
   String? error;
   List<Map<String, dynamic>> convs = [];
 
-  String _myRole() {
-    final r = AuthService().currentUser?.role;
-    if (r == null) return '';
-    // your enum names: admin/family/caregiver/retirementHome
-    // we only care about family/caregiver here
-    return r.name; // 'family' or 'caregiver'
-  }
+  String _myRole() => AuthService().currentUser?.role.name ?? '';
 
   @override
   void initState() {
@@ -32,76 +25,118 @@ class _ChatH2HConversationsPageState extends State<ChatH2HConversationsPage> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      loading = true;
-      error = null;
-    });
-
+    setState(() { loading = true; error = null; });
     try {
       final raw = await api.listConversations();
       convs = raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       setState(() => loading = false);
     } catch (e) {
-      setState(() {
-        loading = false;
-        error = e.toString();
-      });
+      setState(() { loading = false; error = e.toString(); });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final me = _myRole();
+    final cs = Theme.of(context).colorScheme;
+    final me = _myRole(); // ✅ 'me' is defined here
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF9F9F4),
       appBar: AppBar(
-        title: const Text('Chats'),
+        title: const Text('Messages', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         actions: [
-          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+          IconButton(onPressed: _load, icon: const Icon(Icons.refresh_rounded)),
         ],
       ),
-      body: loading
-          ? const Center(child: CircularProgressIndicator())
-          : error != null
-              ? Center(child: Text('Error: $error'))
-              : convs.isEmpty
-                  ? const Center(child: Text('No conversations yet.'))
-                  : ListView.separated(
-                      itemCount: convs.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, i) {
-                        final c = convs[i];
+      body: _buildBody(cs, me), // ✅ 'me' is passed to the builder
+    );
+  }
 
-                        final id = (c['_id'] ?? '').toString();
-                        final last = (c['lastMessageText'] ?? '').toString();
+  Widget _buildBody(ColorScheme cs, String me) {
+    if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return Center(child: Text('Error: $error'));
+    if (convs.isEmpty) return _buildEmptyState(cs);
 
-                        final elderId = c['elderId'];
-                        final elderName = (c['elderName'] ?? '').toString();
-                        final title = elderName.isNotEmpty ? elderName : 'Elder #$elderId';
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        itemCount: convs.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 4),
+        itemBuilder: (context, i) {
+          final c = convs[i];
+          final id = c['_id']?.toString() ?? '';
+          final elderName = c['elderName']?.toString() ?? 'Resident';
+          final lastMsg = c['lastMessageText']?.toString() ?? 'No messages yet';
+          
+          final peerName = (me == 'caregiver') 
+              ? (c['familyName'] ?? 'Family').toString() 
+              : (c['caregiverName'] ?? 'Caregiver').toString();
 
-                        final peerName = (me == 'caregiver')
-                            ? (c['familyName'] ?? 'Family').toString()
-                            : (c['caregiverName'] ?? 'Caregiver').toString();
-
-                        return ListTile(
-                          title: Text(title),
-                          subtitle: Text(
-                            'Chat with $peerName • ${last.isEmpty ? 'No messages yet' : last}',
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: InkWell(
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => ChatH2HPage(conversationId: id))),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 26,
+                      backgroundColor: cs.primaryContainer,
+                      child: Text(elderName.isNotEmpty ? elderName[0] : '?', 
+                        style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(elderName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Chatting with $peerName',
+                            style: TextStyle(color: cs.primary, fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            lastMsg,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: Colors.grey[600], fontSize: 13),
                           ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ChatH2HPage(conversationId: id),
-                              ),
-                            );
-                          },
-                        );
-                      },
+                        ],
+                      ),
                     ),
+                    const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(ColorScheme cs) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.chat_bubble_outline_rounded, size: 64, color: cs.primary.withOpacity(0.2)),
+          const SizedBox(height: 16),
+          const Text("No conversations found.", style: TextStyle(color: Colors.grey)),
+        ],
+      ),
     );
   }
 }
