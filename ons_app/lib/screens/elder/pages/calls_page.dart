@@ -4,7 +4,9 @@ import 'package:ons_app/services/elder_api.dart';
 import 'package:ons_app/screens/elder/widgets/section_card.dart';
 
 class CallsPage extends StatefulWidget {
-  const CallsPage({super.key});
+  // ✅ 1. Accept the navigation callback
+  final void Function(int index)? onBack;
+  const CallsPage({super.key, this.onBack});
 
   @override
   State<CallsPage> createState() => _CallsPageState();
@@ -26,13 +28,19 @@ class _CallsPageState extends State<CallsPage> {
     _load();
   }
 
+  @override
+  void dispose() {
+    targetIdCtrl.dispose(); // ✅ Best practice to dispose controllers
+    super.dispose();
+  }
+
   Future<void> _load() async {
     setState(() { loading = true; error = null; });
     try {
       items = await api.callHistory();
-      setState(() => loading = false);
+      if (mounted) setState(() => loading = false);
     } catch (e) {
-      setState(() { error = e.toString(); loading = false; });
+      if (mounted) setState(() { error = e.toString(); loading = false; });
     }
   }
 
@@ -81,7 +89,18 @@ class _CallsPageState extends State<CallsPage> {
 
     return Scaffold(
       appBar: AppBar(
+        // ✅ 2. Disable default back button to prevent going to website landing page
+        automaticallyImplyLeading: false,
         title: const Text('Calls'),
+        // ✅ 3. Custom leading button to go to Elder Home (Index 0)
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            if (widget.onBack != null) {
+              widget.onBack!(0);
+            }
+          },
+        ),
         actions: [
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
           IconButton(
@@ -151,8 +170,8 @@ class _CallsPageState extends State<CallsPage> {
                               ? Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    IconButton(onPressed: () => _acceptDecline(m, true), icon: const Icon(Icons.check)),
-                                    IconButton(onPressed: () => _acceptDecline(m, false), icon: const Icon(Icons.close)),
+                                    IconButton(onPressed: () => _acceptDecline(m, true), icon: const Icon(Icons.check, color: Colors.green)),
+                                    IconButton(onPressed: () => _acceptDecline(m, false), icon: const Icon(Icons.close, color: Colors.red)),
                                   ],
                                 )
                               : null,

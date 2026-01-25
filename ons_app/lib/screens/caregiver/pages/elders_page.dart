@@ -104,6 +104,7 @@ class _EldersPageState extends State<EldersPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    final bool isMobile = MediaQuery.of(context).size.width < 600;
 
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) return _buildErrorState(cs, tt);
@@ -117,17 +118,17 @@ class _EldersPageState extends State<EldersPage> {
       backgroundColor: const Color(0xFFF9F9F4), // Signature Ons Cream
       body: Column(
         children: [
-          _buildSearchHeader(cs),
+          _buildSearchHeader(cs, isMobile),
           Expanded(
             child: RefreshIndicator(
               onRefresh: _load,
               child: filtered.isEmpty
                   ? _buildEmptyState(cs, tt)
                   : ListView.separated(
-                      padding: const EdgeInsets.all(20),
+                      padding: EdgeInsets.all(isMobile ? 16 : 24),
                       itemCount: filtered.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) => _buildElderCard(filtered[index], cs, tt),
+                      itemBuilder: (context, index) => _buildElderCard(filtered[index], cs, tt, isMobile),
                     ),
             ),
           ),
@@ -136,9 +137,9 @@ class _EldersPageState extends State<EldersPage> {
     );
   }
 
-  Widget _buildSearchHeader(ColorScheme cs) {
+  Widget _buildSearchHeader(ColorScheme cs, bool isMobile) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+      padding: EdgeInsets.fromLTRB(isMobile ? 16 : 24, 10, isMobile ? 16 : 24, 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
@@ -161,64 +162,70 @@ class _EldersPageState extends State<EldersPage> {
     );
   }
 
-  Widget _buildElderCard(Map<String, dynamic> e, ColorScheme cs, TextTheme tt) {
+  Widget _buildElderCard(Map<String, dynamic> e, ColorScheme cs, TextTheme tt, bool isMobile) {
     final name = (e['name'] ?? 'Resident').toString();
     final gender = (e['gender'] ?? 'Other').toString();
     final lastCheck = (e['last_check_in'] ?? 'No data').toString();
 
-    return InkWell(
-      onTap: () {
-        final id = int.tryParse(e['elder_id'].toString());
-        if (id != null) Navigator.push(context, MaterialPageRoute(builder: (_) => ElderDetailPage(elderId: id)));
-      },
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: cs.primaryContainer,
-              child: Text(name[0].toUpperCase(), 
-                style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold, fontSize: 20)),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text('Age: ${e['age'] ?? '-'} • $gender', 
-                    style: tt.bodySmall?.copyWith(color: Colors.grey[600])),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.history, size: 14, color: cs.primary),
-                      const SizedBox(width: 4),
-                      Text('Check-in: $lastCheck', 
-                        style: tt.bodySmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
-                ],
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: InkWell(
+        onTap: () {
+          final id = int.tryParse(e['elder_id'].toString());
+          if (id != null) Navigator.push(context, MaterialPageRoute(builder: (_) => ElderDetailPage(elderId: id)));
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: EdgeInsets.all(isMobile ? 12 : 16),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: isMobile ? 24 : 28,
+                backgroundColor: cs.primaryContainer,
+                child: Text(name[0].toUpperCase(), 
+                  style: TextStyle(color: cs.onPrimaryContainer, fontWeight: FontWeight.bold, fontSize: isMobile ? 18 : 20)),
               ),
-            ),
-            // ✅ Tooltip added for hover/long-press feedback
-            Tooltip(
-              message: "Chat with elder's family",
-              child: IconButton.filledTonal(
-                onPressed: _chatBusy ? null : () => _openChatForElder(e),
-                icon: _chatBusy 
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.chat_bubble_rounded, size: 18),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, 
+                      style: tt.titleMedium?.copyWith(fontWeight: FontWeight.bold, fontSize: isMobile ? 15 : 16),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    Text('Age: ${e['age'] ?? '-'} • $gender', 
+                      style: tt.bodySmall?.copyWith(color: Colors.grey[600])),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.history, size: 12, color: cs.primary),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text('Check-in: $lastCheck', 
+                            style: tt.bodySmall?.copyWith(color: cs.primary, fontWeight: FontWeight.w600),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Tooltip(
+                message: "Chat with elder's family",
+                child: IconButton.filledTonal(
+                  onPressed: _chatBusy ? null : () => _openChatForElder(e),
+                  icon: _chatBusy 
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.chat_bubble_rounded, size: 18),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

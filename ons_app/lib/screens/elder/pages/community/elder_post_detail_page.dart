@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:ons_app/services/elder_community_api.dart.dart';
+import 'package:ons_app/services/elder_community_service.dart';
 
 class ElderPostDetailPage extends StatefulWidget {
   final int postId;
@@ -14,6 +14,27 @@ class _ElderPostDetailPageState extends State<ElderPostDetailPage> {
   final _commentCtrl = TextEditingController();
 
   Future<void> _reload() async => setState(() {});
+
+  Future<String?> _reasonDialog({required String title}) async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: ctrl,
+          decoration: const InputDecoration(
+            hintText: 'Reason (optional)',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()), child: const Text('Send')),
+        ],
+      ),
+    );
+  }
 
   Future<void> _askReportPost() async {
     final reason = await _reasonDialog(title: 'Report post');
@@ -41,27 +62,6 @@ class _ElderPostDetailPageState extends State<ElderPostDetailPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Report failed: $e')));
     }
-  }
-
-  Future<String?> _reasonDialog({required String title}) async {
-    final ctrl = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: ctrl,
-          decoration: const InputDecoration(
-            hintText: 'Reason (optional)',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()), child: const Text('Send')),
-        ],
-      ),
-    );
   }
 
   Future<void> _sendComment() async {
@@ -167,11 +167,9 @@ class _ElderPostDetailPageState extends State<ElderPostDetailPage> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 10),
               Text('Comments (${comments.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
               const SizedBox(height: 8),
-
               for (final c in comments)
                 Card(
                   elevation: 0,
@@ -192,7 +190,6 @@ class _ElderPostDetailPageState extends State<ElderPostDetailPage> {
                     ),
                   ),
                 ),
-
               const SizedBox(height: 12),
               Card(
                 elevation: 0,

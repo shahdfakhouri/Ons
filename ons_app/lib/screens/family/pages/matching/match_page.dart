@@ -38,43 +38,51 @@ class _MatchPageState extends State<MatchPage> {
     }
   }
 
-  // Logic for the assign/select dialog remains identical but styled with _deepNavy
+  // ✅ UPDATED: Dialog now prioritizes Names over IDs
   Future<void> _assignDialog(Map<String, dynamic> m) async {
-    final elderId = TextEditingController();
-    final id = int.tryParse(m['id']?.toString() ?? '') ?? 0;
+    final elderIdController = TextEditingController();
+    final providerName = m['name'] ?? 'This Provider';
+    final providerId = int.tryParse(m['id']?.toString() ?? '') ?? 0;
     final isCaregiver = !m.containsKey('monthly_cost');
 
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        title: Text(isCaregiver ? 'Confirm Caregiver' : 'Select Facility', style: const TextStyle(fontWeight: FontWeight.w900)),
+        title: Text(isCaregiver ? 'Assign Caregiver' : 'Select Facility', style: const TextStyle(fontWeight: FontWeight.w900)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            AppTextField(controller: elderId, label: 'Elder ID (Required)', keyboardType: TextInputType.number),
-            const SizedBox(height: 12),
-            Text('Confirming assignment for Provider #$id', style: const TextStyle(color: _denim, fontSize: 13)),
+            Text("Confirm assignment for:", style: TextStyle(color: _denim, fontSize: 13)),
+            const SizedBox(height: 4),
+            Text(providerName, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _deepNavy)),
+            const SizedBox(height: 20),
+            AppTextField(controller: elderIdController, label: 'Enter Elder ID', keyboardType: TextInputType.number),
           ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), style: FilledButton.styleFrom(backgroundColor: _deepNavy), child: const Text('Confirm')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true), 
+            style: FilledButton.styleFrom(backgroundColor: _deepNavy), 
+            child: const Text('Confirm'),
+          ),
         ],
       ),
     );
 
     if (ok != true) return;
-    final eId = int.tryParse(elderId.text.trim());
+    final eId = int.tryParse(elderIdController.text.trim());
     if (eId == null) return;
 
     try {
       if (isCaregiver) {
-        await api.assignCaregiver(elderId: eId, caregiverId: id);
-        showSnack(context, 'Caregiver Assigned ✅');
+        await api.assignCaregiver(elderId: eId, caregiverId: providerId);
+        showSnack(context, 'Assigned $providerName ✅');
       } else {
-        await api.selectHome(elderId: eId, homeId: id);
-        showSnack(context, 'Facility Selected ✅');
+        await api.selectHome(elderId: eId, homeId: providerId);
+        showSnack(context, 'Selected $providerName ✅');
       }
       _reload();
     } catch (e) {
@@ -106,7 +114,7 @@ class _MatchPageState extends State<MatchPage> {
             ..._results.map((m) => _buildMatchCard(m)),
           
           const SizedBox(height: 32),
-          const SectionTitle('Match History'),
+          const SectionTitle('Recent Match Logs'),
           _buildHistorySection(),
         ],
       ),
@@ -124,9 +132,9 @@ class _MatchPageState extends State<MatchPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("Finding the Perfect Fit", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+          const Text("AI Search Engine", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
           const SizedBox(height: 8),
-          const Text("We use AI to match your budget and location with the best care providers.", style: TextStyle(color: Colors.white70, fontSize: 13)),
+          const Text("Finding providers that fit your budget, location, and care needs.", style: TextStyle(color: Colors.white70, fontSize: 13)),
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
@@ -135,7 +143,7 @@ class _MatchPageState extends State<MatchPage> {
               onPressed: _running ? null : _runMatch,
               style: FilledButton.styleFrom(backgroundColor: _sage, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
               icon: _running ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.auto_awesome),
-              label: Text(_running ? "Searching..." : "Start AI Matching", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+              label: Text(_running ? "Searching..." : "Start Intelligent Match", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
             ),
           ),
         ],
@@ -145,7 +153,7 @@ class _MatchPageState extends State<MatchPage> {
 
   Widget _buildMatchCard(Map<String, dynamic> m) {
     final name = m['name'] ?? 'Provider';
-    final city = m['city'] ?? 'Unknown';
+    final city = m['city'] ?? 'Location N/A';
     final score = double.tryParse(m['score']?.toString() ?? '0') ?? 0.0;
     final isCaregiver = !m.containsKey('monthly_cost');
 
@@ -163,7 +171,7 @@ class _MatchPageState extends State<MatchPage> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(color: _sage.withOpacity(0.1), shape: BoxShape.circle),
-              child: Icon(isCaregiver ? Icons.person_rounded : Icons.apartment_rounded, color: _sage),
+              child: Icon(isCaregiver ? Icons.person_rounded : Icons.apartment_rounded, color: _sage, size: 24),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -207,12 +215,15 @@ class _MatchPageState extends State<MatchPage> {
         return Container(
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28)),
           child: Column(
-            children: list.take(3).map((r) => ListTile(
-              leading: const Icon(Icons.history_rounded, size: 20, color: _denim),
-              title: Text('${r['matched_role'].toString().toUpperCase()} #${r['matched_id']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              subtitle: Text('Score: ${r['score']}%', style: const TextStyle(fontSize: 11)),
-              trailing: const Icon(Icons.chevron_right, size: 16),
-            )).toList(),
+            children: list.take(3).map((r) {
+              final type = r['matched_role'].toString().replaceAll('_', ' ');
+              return ListTile(
+                leading: const Icon(Icons.history_rounded, size: 20, color: _denim),
+                title: Text('$type #${r['matched_id']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                subtitle: Text('Accuracy Score: ${r['score']}%', style: const TextStyle(fontSize: 11)),
+                trailing: const Icon(Icons.chevron_right, size: 16),
+              );
+            }).toList(),
           ),
         );
       },
@@ -223,7 +234,13 @@ class _MatchPageState extends State<MatchPage> {
     return Container(
       padding: const EdgeInsets.all(40),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(28)),
-      child: const Center(child: Text("Run the AI search above to see care providers tailored to your needs.", textAlign: TextAlign.center, style: TextStyle(color: _denim, fontStyle: FontStyle.italic))),
+      child: const Center(
+        child: Text(
+          "Trigger the AI search above to find care providers tailored to your budget and region.", 
+          textAlign: TextAlign.center, 
+          style: TextStyle(color: _denim, fontStyle: FontStyle.italic),
+        ),
+      ),
     );
   }
 }

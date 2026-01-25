@@ -4,7 +4,9 @@ import 'package:ons_app/services/elder_api.dart';
 import 'package:ons_app/screens/elder/widgets/section_card.dart';
 
 class MedicationTodayPage extends StatefulWidget {
-  const MedicationTodayPage({super.key});
+  // 1. Correctly define the callback in the Widget class
+  final void Function(int index)? onBack; 
+  const MedicationTodayPage({super.key, this.onBack});
 
   @override
   State<MedicationTodayPage> createState() => _MedicationTodayPageState();
@@ -12,7 +14,6 @@ class MedicationTodayPage extends StatefulWidget {
 
 class _MedicationTodayPageState extends State<MedicationTodayPage> {
   final api = ElderApi();
-
   bool loading = true;
   String? error;
   List<dynamic> items = [];
@@ -34,35 +35,25 @@ class _MedicationTodayPageState extends State<MedicationTodayPage> {
   }
 
   Future<void> _confirm(dynamic item) async {
-  final Map<String, dynamic> body = {};
+    final Map<String, dynamic> body = {};
+    final id = item['medication_id'] ?? item['id'] ?? item['schedule_id'] ?? item['log_id'];
+    if (id != null) body['medication_id'] = id;
 
-  // required
-  final id =
-      item['medication_id'] ?? item['id'] ?? item['schedule_id'] ?? item['log_id'];
-  if (id != null) body['medication_id'] = id;
+    final scheduled = item['scheduled_time'] ?? item['time'];
+    if (scheduled != null && scheduled.toString().trim().isNotEmpty) {
+      body['scheduled_time'] = scheduled;
+    }
 
-  // ✅ backend expects scheduled_time
-  final scheduled = item['scheduled_time'] ?? item['time'];
-  if (scheduled != null && scheduled.toString().trim().isNotEmpty) {
-    body['scheduled_time'] = scheduled;
+    try {
+      await api.confirmMedTaken(body);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Marked as taken ✅')));
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Confirm failed: $e')));
+    }
   }
-
-  // optional notes (only if you want)
-  // body['notes'] = 'Taken by elder';
-
-  try {
-    await api.confirmMedTaken(body);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(const SnackBar(content: Text('Marked as taken ✅')));
-    await _load();
-  } catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text('Confirm failed: $e')));
-  }
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -72,6 +63,15 @@ class _MedicationTodayPageState extends State<MedicationTodayPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Medicines Today'),
+        // 2. Access the callback using 'widget.onBack'
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            if (widget.onBack != null) {
+              widget.onBack!(0); // Navigates back to Home (Index 0)
+            }
+          },
+        ),
         actions: [
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
           IconButton(
@@ -99,7 +99,11 @@ class _MedicationTodayPageState extends State<MedicationTodayPage> {
                         child: ListTile(
                           leading: const Icon(Icons.medication),
                           title: Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                          subtitle: Text([if (dose.isNotEmpty) 'Dose: $dose', if (time.isNotEmpty) 'Time: $time', if (status.isNotEmpty) 'Status: $status'].join(' • ')),
+                          subtitle: Text([
+                            if (dose.isNotEmpty) 'Dose: $dose', 
+                            if (time.isNotEmpty) 'Time: $time', 
+                            if (status.isNotEmpty) 'Status: $status'
+                          ].join(' • ')),
                           trailing: FilledButton(
                             onPressed: () => _confirm(e),
                             child: const Text('Taken'),

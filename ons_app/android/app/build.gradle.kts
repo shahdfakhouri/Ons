@@ -5,7 +5,7 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 
 
-  id("com.google.gms.google-services") version "4.4.2" apply false
+    id("com.google.gms.google-services")
 
 
 }
@@ -13,7 +13,7 @@ plugins {
 android {
     namespace = "com.example.ons_app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11

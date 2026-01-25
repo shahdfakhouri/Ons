@@ -31,76 +31,123 @@ class _ContactsPageState extends State<ContactsPage> {
       family = (data['family'] as List? ?? []).cast<Map<String, dynamic>>();
       caregiver = (data['caregiver'] as List? ?? []).cast<Map<String, dynamic>>();
       home = (data['retirement_home'] as List? ?? []).cast<Map<String, dynamic>>();
-      setState(() => loading = false);
+      if (mounted) setState(() => loading = false);
     } catch (e) {
-      setState(() { error = e.toString(); loading = false; });
+      if (mounted) setState(() { error = e.toString(); loading = false; });
     }
   }
 
   Future<void> _call(String phone) async {
     final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      _showError('Could not launch phone dialer');
+    }
   }
 
   Future<void> _email(String email) async {
     final uri = Uri.parse('mailto:$email');
-    if (await canLaunchUrl(uri)) await launchUrl(uri);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      _showError('Could not launch email app');
+    }
   }
 
-  Widget section(String title, List<Map<String, dynamic>> list) {
-    if (list.isEmpty) return Card(child: ListTile(title: Text(title), subtitle: const Text('No contacts')));
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18)),
-            const SizedBox(height: 10),
-            ...list.map((c) {
-              final name = c['name']?.toString() ?? title;
-              final phone = (c['phone'] ?? c['contact_phone'])?.toString() ?? '';
-              final email = (c['email'] ?? c['contact_email'])?.toString() ?? '';
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+  }
 
-              return Card(
-                child: ListTile(
-                  leading: const CircleAvatar(child: Icon(Icons.person)),
-                  title: Text(name, style: const TextStyle(fontWeight: FontWeight.w800)),
-                  subtitle: Text([if (phone.isNotEmpty) 'Phone: $phone', if (email.isNotEmpty) 'Email: $email'].join('\n')),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (phone.isNotEmpty) IconButton(onPressed: () => _call(phone), icon: const Icon(Icons.call)),
-                      if (email.isNotEmpty) IconButton(onPressed: () => _email(email), icon: const Icon(Icons.email)),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ],
+  Widget section(String title, List<Map<String, dynamic>> list, bool isMobile) {
+    if (list.isEmpty) {
+      return Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade200)),
+        child: ListTile(title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)), subtitle: const Text('No contacts found')),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Text(title.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.2, color: Color(0xFF8E9297))),
         ),
-      ),
+        ...list.map((c) {
+          final name = c['name']?.toString() ?? title;
+          final phone = (c['phone'] ?? c['contact_phone'])?.toString() ?? '';
+          final email = (c['email'] ?? c['contact_email'])?.toString() ?? '';
+
+          return Card(
+            elevation: 0,
+            margin: const EdgeInsets.only(bottom: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey.shade100)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF313647).withOpacity(0.1),
+                  child: const Icon(Icons.person, color: Color(0xFF313647)),
+                ),
+                title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (phone.isNotEmpty) Text(phone, style: TextStyle(color: Colors.grey.shade600)),
+                    if (email.isNotEmpty) Text(email, style: TextStyle(color: Colors.grey.shade600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (phone.isNotEmpty) 
+                      IconButton(
+                        onPressed: () => _call(phone), 
+                        icon: const Icon(Icons.call, color: Colors.green),
+                        tooltip: 'Call',
+                      ),
+                    if (email.isNotEmpty) 
+                      IconButton(
+                        onPressed: () => _email(email), 
+                        icon: const Icon(Icons.email, color: Color(0xFF435663)),
+                        tooltip: 'Email',
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+        const SizedBox(height: 16),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return const Center(child: CircularProgressIndicator());
-    if (error != null) return Center(child: Text('Error: $error'));
+    if (loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (error != null) return Scaffold(body: Center(child: Text('Error: $error')));
+
+    final bool isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF9F9F4), // Signature Ons Cream
       appBar: AppBar(
-        title: const Text('Contacts'),
-        actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))],
+        title: const Text('Contacts', style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+        ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
         children: [
-          section('Family', family),
-          const SizedBox(height: 10),
-          section('Caregiver', caregiver),
-          const SizedBox(height: 10),
-          section('Retirement Home', home),
+          section('Family', family, isMobile),
+          section('Caregiver', caregiver, isMobile),
+          section('Retirement Home', home, isMobile),
         ],
       ),
     );

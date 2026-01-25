@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:ons_app/services/elder_companion_api.dart.dart';
 
 class ElderCompanionChatPage extends StatefulWidget {
-  const ElderCompanionChatPage({super.key});
+  final void Function(int index)? onBack;
+  const ElderCompanionChatPage({super.key, this.onBack});
 
   @override
   State<ElderCompanionChatPage> createState() => _ElderCompanionChatPageState();
@@ -19,6 +20,10 @@ class _ElderCompanionChatPageState extends State<ElderCompanionChatPage> {
   final List<_ChatMsg> _messages = [
     _ChatMsg(role: 'assistant', text: 'Hello 🌿 I’m here with you. How are you feeling today?'),
   ];
+
+  void _triggerBack() {
+    if (widget.onBack != null) widget.onBack!(0);
+  }
 
   @override
   void dispose() {
@@ -40,11 +45,7 @@ class _ElderCompanionChatPageState extends State<ElderCompanionChatPage> {
     _jumpToBottom();
 
     try {
-      final data = await _svc.chat(
-        message: text,
-        conversationId: _conversationId,
-      );
-
+      final data = await _svc.chat(message: text, conversationId: _conversationId);
       final reply = (data['reply'] ?? '').toString();
       final convId = (data['conversationId'] ?? '').toString();
 
@@ -53,9 +54,7 @@ class _ElderCompanionChatPageState extends State<ElderCompanionChatPage> {
         _messages.add(_ChatMsg(role: 'assistant', text: reply.isEmpty ? 'I’m here with you.' : reply));
       });
     } catch (e) {
-      setState(() {
-        _messages.add(_ChatMsg(role: 'assistant', text: 'Sorry, I couldn’t reply. Please try again.'));
-      });
+      setState(() => _messages.add(_ChatMsg(role: 'assistant', text: 'Sorry, please try again.')));
     } finally {
       setState(() => _sending = false);
       _jumpToBottom();
@@ -64,113 +63,89 @@ class _ElderCompanionChatPageState extends State<ElderCompanionChatPage> {
 
   void _jumpToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;               // ✅ add
-      if (!_scroll.hasClients) return;
-      _scroll.animateTo(
-        _scroll.position.maxScrollExtent + 200,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
-      );
+      if (!mounted || !_scroll.hasClients) return;
+      _scroll.animateTo(_scroll.position.maxScrollExtent + 200, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
     });
   }
-
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('AI Companion'),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              controller: _scroll,
-              padding: const EdgeInsets.all(12),
-              itemCount: _messages.length,
-              itemBuilder: (context, i) {
-                final m = _messages[i];
-                final isMe = m.role == 'user';
-
-                return Align(
-                  alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    constraints: const BoxConstraints(maxWidth: 520),
-                    decoration: BoxDecoration(
-                      color: isMe ? cs.primary : cs.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Text(
-                      m.text,
-                      style: TextStyle(
-                        fontSize: 18,
-                        height: 1.25,
-                        color: isMe ? cs.onPrimary : cs.onSurface,
-                        fontWeight: FontWeight.w600,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _triggerBack();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _triggerBack),
+          title: const Text('AI Companion'),
+        ),
+        body: Column(
+          children: [
+            Expanded(
+              child: ListView.builder(
+                controller: _scroll,
+                padding: const EdgeInsets.all(16),
+                itemCount: _messages.length,
+                itemBuilder: (context, i) {
+                  final m = _messages[i];
+                  final isMe = m.role == 'user';
+                  return Align(
+                    alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      constraints: const BoxConstraints(maxWidth: 500),
+                      decoration: BoxDecoration(
+                        color: isMe ? const Color(0xFF313647) : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Text(
+                        m.text,
+                        style: TextStyle(fontSize: 18, color: isMe ? Colors.white : Colors.black, fontWeight: FontWeight.w600),
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      // later: speech-to-text
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Voice input coming soon 🎤')),
-                      );
-                    },
-                    icon: const Icon(Icons.mic),
-                    iconSize: 28,
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _ctrl,
-                      enabled: !_sending,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _send(),
-                      decoration: const InputDecoration(
-                        hintText: 'Type here…',
-                        border: OutlineInputBorder(),
-                      ),
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  FilledButton(
-                    onPressed: _sending ? null : _send,
-                    child: _sending
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 3),
-                          )
-                        : const Icon(Icons.send),
-                  ),
-                ],
+                  );
+                },
               ),
             ),
-          ),
-        ],
+            _buildInputArea(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInputArea() {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            IconButton(icon: const Icon(Icons.mic), iconSize: 32, onPressed: () {}),
+            Expanded(
+              child: TextField(
+                controller: _ctrl,
+                enabled: !_sending,
+                decoration: const InputDecoration(hintText: 'Type here…', border: OutlineInputBorder()),
+                style: const TextStyle(fontSize: 18),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(onPressed: _sending ? null : _send, child: _sending ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.send)),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _ChatMsg {
-  final String role; // 'user' or 'assistant'
+  final String role;
   final String text;
   _ChatMsg({required this.role, required this.text});
 }

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:ons_app/services/elder_community_api.dart.dart';
+import 'package:ons_app/services/elder_community_service.dart';
 
 class ElderCreatePostPage extends StatefulWidget {
   const ElderCreatePostPage({super.key});
@@ -52,73 +52,75 @@ class _ElderCreatePostPageState extends State<ElderCreatePostPage> {
     super.dispose();
   }
 
+  // (Imports remain the same)
+// Inside _ElderCreatePostPageState build method:
+
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
     return Scaffold(
-      appBar: AppBar(title: const Text('New Post')),
+      backgroundColor: const Color(0xFFFFF8D4), // Signature Cream
+      appBar: AppBar(
+        title: const Text('Share with Community', style: TextStyle(fontWeight: FontWeight.w900)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(24),
         children: [
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Text(_error!, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
-            ),
-
+          _buildInputLabel("What's on your mind?"),
           TextField(
             controller: _titleCtrl,
-            enabled: !_loading,
-            decoration: const InputDecoration(
-              labelText: 'Title',
-              border: OutlineInputBorder(),
-            ),
+            decoration: _inputDecoration("Title of your post"),
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 12),
-
+          const SizedBox(height: 20),
+          _buildInputLabel("Category"),
           DropdownButtonFormField<String>(
             value: _category,
-            items: const [
-              DropdownMenuItem(value: 'Health', child: Text('Health')),
-              DropdownMenuItem(value: 'Friends', child: Text('Friends')),
-              DropdownMenuItem(value: 'Fun', child: Text('Fun')),
-              DropdownMenuItem(value: 'Other', child: Text('Other')),
-            ],
-            onChanged: _loading ? null : (v) => setState(() => _category = v ?? 'Other'),
-            decoration: const InputDecoration(
-              labelText: 'Category',
-              border: OutlineInputBorder(),
-            ),
+            items: ['Health', 'Friends', 'Fun', 'Other'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+            onChanged: (v) => setState(() => _category = v ?? 'Other'),
+            decoration: _inputDecoration("Select a category"),
           ),
-          const SizedBox(height: 12),
-
+          const SizedBox(height: 20),
+          _buildInputLabel("Details"),
           TextField(
             controller: _contentCtrl,
-            enabled: !_loading,
             maxLines: 8,
-            decoration: const InputDecoration(
-              labelText: 'Write your post',
-              border: OutlineInputBorder(),
-            ),
+            decoration: _inputDecoration("Write your thoughts here..."),
           ),
-          const SizedBox(height: 16),
-
+          const SizedBox(height: 32),
           SizedBox(
             height: 56,
-            child: FilledButton.icon(
+            child: FilledButton(
               style: FilledButton.styleFrom(
-                backgroundColor: cs.primary,
+                backgroundColor: const Color(0xFF313647), // Deep Navy
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
               onPressed: _loading ? null : _submit,
-              icon: _loading
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 3))
-                  : const Icon(Icons.send),
-              label: Text(_loading ? 'Posting...' : 'Post', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+              child: _loading 
+                ? const CircularProgressIndicator(color: Colors.white) 
+                : const Text('Post to Community', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+      contentPadding: const EdgeInsets.all(18),
+    );
+  }
+
+  Widget _buildInputLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8),
+      child: Text(text, style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF313647))),
     );
   }
 }

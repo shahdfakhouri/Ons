@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:ons_app/services/elder_community_api.dart.dart';
+import 'package:ons_app/services/elder_community_service.dart';
 import 'elder_create_post_page.dart';
 import 'elder_post_detail_page.dart';
 
 class ElderCommunityFeedPage extends StatefulWidget {
-  const ElderCommunityFeedPage({super.key});
+  final void Function(int index)? onBack;
+  const ElderCommunityFeedPage({super.key, this.onBack});
 
   @override
   State<ElderCommunityFeedPage> createState() => _ElderCommunityFeedPageState();
@@ -14,128 +15,118 @@ class _ElderCommunityFeedPageState extends State<ElderCommunityFeedPage> {
   final _svc = ElderCommunityService();
   String _category = 'All';
 
+  static const _deepNavy = Color(0xFF313647);
+  static const _sage = Color(0xFFA3B087);
+  static const _cream = Color(0xFFF9F9F4);
+
+  void _triggerBack() {
+    if (widget.onBack != null) widget.onBack!(0);
+  }
+
   Future<void> _refresh() async => setState(() {});
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final bigTitle = Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900);
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _triggerBack();
+      },
+      child: Scaffold(
+        backgroundColor: _cream,
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: _deepNavy),
+            onPressed: _triggerBack,
+          ),
+          title: const Text('Community', style: TextStyle(fontWeight: FontWeight.w900, color: _deepNavy)),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          actions: [IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh_rounded, color: _deepNavy))],
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () async {
+            await Navigator.push(context, MaterialPageRoute(builder: (_) => const ElderCreatePostPage()));
+            _refresh();
+          },
+          backgroundColor: _deepNavy,
+          icon: const Icon(Icons.add_comment_rounded, color: Colors.white),
+          label: const Text('New Post', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+        body: Column(
+          children: [
+            _buildCategoryFilter(),
+            Expanded(
+              child: FutureBuilder(
+                future: _svc.getPosts(category: _category == 'All' ? null : _category),
+                builder: (context, snap) {
+                  if (snap.connectionState != ConnectionState.done) {
+                    return const Center(child: CircularProgressIndicator(color: _sage));
+                  }
+                  final posts = snap.data ?? [];
+                  if (posts.isEmpty) return const Center(child: Text("No posts found in this category."));
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Community', style: bigTitle),
-        actions: [
-          IconButton(onPressed: _refresh, icon: const Icon(Icons.refresh)),
-        ],
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    itemCount: posts.length,
+                    itemBuilder: (_, i) => _buildPostCard(posts[i]),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ElderCreatePostPage()),
+    );
+  }
+
+  Widget _buildCategoryFilter() {
+    final categories = ['All', 'Health', 'Friends', 'Fun', 'Other'];
+    return SizedBox(
+      height: 60,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemCount: categories.length,
+        itemBuilder: (context, i) {
+          final cat = categories[i];
+          final isSelected = _category == cat;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: FilterChip(
+              selected: isSelected,
+              label: Text(cat),
+              onSelected: (v) => setState(() => _category = cat),
+              backgroundColor: Colors.white,
+              selectedColor: _sage,
+              labelStyle: TextStyle(color: isSelected ? Colors.white : _deepNavy, fontWeight: FontWeight.bold),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
           );
-          if (!mounted) return;
-          _refresh();
         },
-        icon: const Icon(Icons.edit),
-        label: const Text('New Post'),
       ),
-      body: Column(
-        children: [
-          // category filter (simple)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: cs.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.filter_list),
-                  const SizedBox(width: 10),
-                  const Text('Category:', style: TextStyle(fontWeight: FontWeight.w800)),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _category,
-                      decoration: const InputDecoration(border: InputBorder.none),
-                      items: const [
-                        DropdownMenuItem(value: 'All', child: Text('All')),
-                        DropdownMenuItem(value: 'Health', child: Text('Health')),
-                        DropdownMenuItem(value: 'Friends', child: Text('Friends')),
-                        DropdownMenuItem(value: 'Fun', child: Text('Fun')),
-                        DropdownMenuItem(value: 'Other', child: Text('Other')),
-                      ],
-                      onChanged: (v) => setState(() => _category = v ?? 'All'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+    );
+  }
 
-          Expanded(
-            child: FutureBuilder(
-              future: _svc.getPosts(category: _category == 'All' ? null : _category),
-              builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return Center(child: Text('Error: ${snap.error}'));
-                }
-                final posts = snap.data ?? [];
-                if (posts.isEmpty) {
-                  return const Center(child: Text('No posts yet.'));
-                }
-
-                return ListView.separated(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: posts.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (_, i) {
-                    final p = posts[i];
-                    final title = (p['title'] ?? '').toString();
-                    final author = (p['author_name'] ?? '').toString();
-                    final category = (p['category'] ?? 'Other').toString();
-                    final createdAt = (p['created_at'] ?? '').toString();
-
-                    return Card(
-                      elevation: 0,
-                      color: cs.surfaceContainerLow,
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        title: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Wrap(
-                            spacing: 10,
-                            runSpacing: 6,
-                            children: [
-                              Chip(label: Text(category)),
-                              Chip(label: Text(author.isEmpty ? 'Elder' : author)),
-                              if (createdAt.isNotEmpty) Chip(label: Text(createdAt)),
-                            ],
-                          ),
-                        ),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () {
-                          final id = (p['post_id'] as num).toInt();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (_) => ElderPostDetailPage(postId: id)),
-                          );
-                        },
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
+  Widget _buildPostCard(Map p) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: _deepNavy.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        title: Text(p['title'] ?? '', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _deepNavy)),
+        subtitle: Text('by ${p['author_name'] ?? 'Elder'} • ${p['category'] ?? 'Other'}', style: const TextStyle(fontSize: 12)),
+        trailing: const Icon(Icons.chevron_right_rounded, color: _sage),
+        onTap: () {
+          final id = (p['post_id'] as num).toInt();
+          Navigator.push(context, MaterialPageRoute(builder: (_) => ElderPostDetailPage(postId: id)));
+        },
       ),
     );
   }

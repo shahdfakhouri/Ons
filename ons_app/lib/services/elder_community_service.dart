@@ -22,14 +22,17 @@ class ElderCommunityService {
   }
 
   Future<List<Map<String, dynamic>>> getPosts({String? category}) async {
-    final uri = Uri.parse('$_base/posts').replace(queryParameters: {
-      if (category != null && category.isNotEmpty) 'category': category,
-    });
+    final uri = Uri.parse('$_base/posts').replace(
+      queryParameters: {
+        if (category != null && category.isNotEmpty) 'category': category,
+      },
+    );
 
     final res = await http.get(uri, headers: _headers());
     if (res.statusCode != 200) {
       throw Exception('Failed to load posts: ${res.statusCode} ${res.body}');
     }
+
     final data = jsonDecode(res.body) as Map<String, dynamic>;
     final posts = (data['posts'] as List? ?? [])
         .map((e) => Map<String, dynamic>.from(e as Map))
@@ -65,6 +68,7 @@ class ElderCommunityService {
     if (res.statusCode != 201) {
       throw Exception('Failed to create post: ${res.statusCode} ${res.body}');
     }
+
     final data = jsonDecode(res.body) as Map<String, dynamic>;
     return (data['post_id'] as num).toInt();
   }

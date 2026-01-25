@@ -157,16 +157,29 @@ class FamilyApi {
       _put('/emergency/$emergencyId/cancel');
 
   // ---------------- Events + Calendar feed ----------------
+ // ---------------- Events + Calendar feed ----------------
+  
+  // ✅ Hits: POST /api/family/events
   Future<Map<String, dynamic>> createEvent(Map<String, dynamic> body) => _post('/events', body: body);
+
+  // ✅ Hits: GET /api/family/events?from=&to=&elder_id=
+  // Refined to ensure elderId is only sent if it has a value
   Future<Map<String, dynamic>> getEvents({String? from, String? to, String? elderId}) =>
       _get('/events', query: {
-        if (from != null && to != null) 'from': from,
-        if (to != null && from != null) 'to': to,
+        if (from != null && from.isNotEmpty) 'from': from,
+        if (to != null && to.isNotEmpty) 'to': to,
         if (elderId != null && elderId.isNotEmpty) 'elder_id': elderId,
       });
-  Future<Map<String, dynamic>> updateEvent(int eventId, Map<String, dynamic> body) => _put('/events/$eventId', body: body);
+
+  // ✅ Hits: PUT /api/family/events/:eventId
+  Future<Map<String, dynamic>> updateEvent(int eventId, Map<String, dynamic> body) => 
+      _put('/events/$eventId', body: body);
+
+  // ✅ Hits: DELETE /api/family/events/:eventId
   Future<Map<String, dynamic>> deleteEvent(int eventId) => _delete('/events/$eventId');
 
+  // ✅ Hits: GET /api/family/calendar?from=&to=&elder_id=
+  // This is the "Shared Calendar Feed" that combines events and visits
   Future<Map<String, dynamic>> getCalendar({required String from, required String to, String? elderId}) =>
       _get('/calendar', query: {
         'from': from,

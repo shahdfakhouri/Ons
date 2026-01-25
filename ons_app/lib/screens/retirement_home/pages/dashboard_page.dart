@@ -55,66 +55,89 @@ class _RetirementDashboardPageState extends State<RetirementDashboardPage> {
     if (_loading) return const Center(child: CircularProgressIndicator(color: _deepNavy));
     if (_error != null) return Center(child: Text(_error!, style: const TextStyle(color: Colors.red)));
 
+    // Detect if we are on a small screen
+    final bool isSmallScreen = MediaQuery.of(context).size.width < 600;
+
     return RefreshIndicator(
       onRefresh: _load,
       color: _deepNavy,
       child: ListView(
-        padding: const EdgeInsets.all(32),
+        // Responsive padding: less on mobile, more on web
+        padding: EdgeInsets.all(isSmallScreen ? 16 : 32),
         children: [
-          const Text("Morning, Admin", style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: _deepNavy, letterSpacing: -1)),
-          const Text("The facility is currently running at peak efficiency.", style: TextStyle(color: _denim, fontSize: 16)),
+          Text(
+            "Morning, Admin", 
+            style: TextStyle(
+              fontSize: isSmallScreen ? 28 : 34, 
+              fontWeight: FontWeight.w900, 
+              color: _deepNavy, 
+              letterSpacing: -1
+            )
+          ),
+          Text(
+            "The facility is currently running at peak efficiency.", 
+            style: TextStyle(color: _denim, fontSize: isSmallScreen ? 14 : 16)
+          ),
           const SizedBox(height: 36),
-          _buildBentoGrid(),
-          const SizedBox(height: 48),
-          _buildElevatedProfileCard(),
+          _buildBentoGrid(isSmallScreen),
+          const SizedBox(height: 32),
+          _buildElevatedProfileCard(isSmallScreen),
         ],
       ),
     );
   }
 
-  Widget _buildBentoGrid() {
+  Widget _buildBentoGrid(bool isSmallScreen) {
     return LayoutBuilder(builder: (context, constraints) {
-      int crossAxisCount = constraints.maxWidth > 800 ? 4 : 2;
+      // 1 column for very small phones, 2 for tablets, 4 for web
+      int crossAxisCount = constraints.maxWidth < 450 ? 1 : (constraints.maxWidth > 900 ? 4 : 2);
+      
       return GridView.count(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         crossAxisCount: crossAxisCount,
-        mainAxisSpacing: 20,
-        crossAxisSpacing: 20,
-        childAspectRatio: 1.4,
-        // ✅ No 'const' keywords here because _stats is a variable
+        mainAxisSpacing: 16,
+        crossAxisSpacing: 16,
+        // Wider aspect ratio on mobile so items aren't too tall
+        childAspectRatio: isSmallScreen ? 2.0 : 1.4,
         children: [
-          _bentoItem("Residents", _stats?['totalElders'], Icons.elderly_rounded, _sage),
-          _bentoItem("Staff", _stats?['totalCaregivers'], Icons.badge_rounded, _denim),
-          _bentoItem("Active Alerts", _stats?['totalAlerts'], Icons.warning_amber_rounded, Colors.redAccent),
-          _bentoItem("Status", "Live", Icons.wifi_tethering_rounded, _deepNavy),
+          _bentoItem("Residents", _stats?['totalElders'], Icons.elderly_rounded, _sage, isSmallScreen),
+          _bentoItem("Staff", _stats?['totalCaregivers'], Icons.badge_rounded, _denim, isSmallScreen),
+          _bentoItem("Active Alerts", _stats?['totalAlerts'], Icons.warning_amber_rounded, Colors.redAccent, isSmallScreen),
+          _bentoItem("Status", "Live", Icons.wifi_tethering_rounded, _deepNavy, isSmallScreen),
         ],
       );
     });
   }
 
-  Widget _bentoItem(String label, dynamic val, IconData icon, Color color) {
+  Widget _bentoItem(String label, dynamic val, IconData icon, Color color, bool isSmallScreen) {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(32),
-        boxShadow: [BoxShadow(color: _deepNavy.withOpacity(0.04), blurRadius: 24, offset: const Offset(0, 8))],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: _deepNavy.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
-            child: Icon(icon, color: color, size: 22),
+            child: Icon(icon, color: color, size: isSmallScreen ? 18 : 22),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(val?.toString() ?? '-', style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w900, color: _deepNavy)),
-              Text(label, style: const TextStyle(color: _denim, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+              Text(
+                val?.toString() ?? '-', 
+                style: TextStyle(fontSize: isSmallScreen ? 24 : 30, fontWeight: FontWeight.w900, color: _deepNavy)
+              ),
+              Text(
+                label, 
+                style: const TextStyle(color: _denim, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)
+              ),
             ],
           ),
         ],
@@ -122,12 +145,12 @@ class _RetirementDashboardPageState extends State<RetirementDashboardPage> {
     );
   }
 
-  Widget _buildElevatedProfileCard() {
+  Widget _buildElevatedProfileCard(bool isSmallScreen) {
     return Container(
-      padding: const EdgeInsets.all(40),
+      padding: EdgeInsets.all(isSmallScreen ? 24 : 40),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(40),
+        borderRadius: BorderRadius.circular(isSmallScreen ? 24 : 40),
         boxShadow: [BoxShadow(color: _deepNavy.withOpacity(0.05), blurRadius: 40)],
       ),
       child: Form(
@@ -135,21 +158,24 @@ class _RetirementDashboardPageState extends State<RetirementDashboardPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text("Facility Configuration", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: _deepNavy)),
-            const SizedBox(height: 32),
+            Text(
+              "Facility Configuration", 
+              style: TextStyle(fontSize: isSmallScreen ? 18 : 22, fontWeight: FontWeight.w900, color: _deepNavy)
+            ),
+            const SizedBox(height: 24),
             _styledInput(_name, "Facility Name", Icons.business_rounded),
             _styledInput(_monthly, "Monthly Rate (\$)", Icons.monetization_on_rounded),
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              height: 64,
+              height: 56,
               child: FilledButton(
-                onPressed: () {}, // Implementation of _saveProfile
+                onPressed: () {}, 
                 style: FilledButton.styleFrom(
                   backgroundColor: _deepNavy,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
-                child: const Text("Sync Profile Changes", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _cream)),
+                child: const Text("Sync Profile Changes", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: _cream)),
               ),
             )
           ],
@@ -160,17 +186,17 @@ class _RetirementDashboardPageState extends State<RetirementDashboardPage> {
 
   Widget _styledInput(TextEditingController ctrl, String label, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.only(bottom: 20),
       child: TextFormField(
         controller: ctrl,
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: _denim, fontWeight: FontWeight.w600),
-          prefixIcon: Icon(icon, color: _deepNavy, size: 22),
+          labelStyle: const TextStyle(color: _denim, fontWeight: FontWeight.w600, fontSize: 14),
+          prefixIcon: Icon(icon, color: _deepNavy, size: 20),
           filled: true,
-          fillColor: _cream.withOpacity(0.3),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-          contentPadding: const EdgeInsets.symmetric(vertical: 22, horizontal: 16),
+          fillColor: _cream.withOpacity(0.2),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+          contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
         ),
       ),
     );

@@ -5,7 +5,8 @@ import 'package:ons_app/screens/elder/widgets/labeled_switch.dart';
 import 'package:ons_app/screens/elder/widgets/section_card.dart';
 
 class ConsentPage extends StatefulWidget {
-  const ConsentPage({super.key});
+  final void Function(int index)? onBack;
+  const ConsentPage({super.key, this.onBack});
 
   @override
   State<ConsentPage> createState() => _ConsentPageState();
@@ -14,9 +15,12 @@ class ConsentPage extends StatefulWidget {
 class _ConsentPageState extends State<ConsentPage> {
   final api = ElderApi();
   ElderConsent? consent;
-
   bool loading = true;
   String? error;
+
+  void _triggerBack() {
+    if (widget.onBack != null) widget.onBack!(0);
+  }
 
   @override
   void initState() {
@@ -39,12 +43,12 @@ class _ConsentPageState extends State<ConsentPage> {
 
   Future<void> _save() async {
     if (consent == null) return;
-    setState(() { loading = true; error = null; });
+    setState(() { loading = true; });
     try {
       await api.updateConsent(consent!.toJson());
-      setState(() { loading = false; });
+      setState(() => loading = false);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Updated ✅')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Privacy Settings Updated ✅')));
     } catch (e) {
       setState(() { error = e.toString(); loading = false; });
     }
@@ -52,81 +56,62 @@ class _ConsentPageState extends State<ConsentPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (loading) return const Center(child: CircularProgressIndicator());
-    if (error != null) return Center(child: Text('Error: $error'));
+    if (loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (error != null) return Scaffold(body: Center(child: Text('Error: $error')));
 
-    final c = consent!;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Privacy / Consent'),
-        actions: [IconButton(onPressed: _load, icon: const Icon(Icons.refresh))],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          SectionCard(
-            title: 'Who can see what?',
-            child: Column(
-              children: [
-                LabeledSwitch(
-                  title: 'Share location',
-                  subtitle: 'Allow family/caregiver to see my location',
-                  value: c.shareLocation,
-                  onChanged: (v) => setState(() => consent = ElderConsent(
-                    shareLocation: v,
-                    shareHealth: c.shareHealth,
-                    shareMedia: c.shareMedia,
-                    shareSummary: c.shareSummary,
-                  )),
-                ),
-                LabeledSwitch(
-                  title: 'Share health',
-                  subtitle: 'Allow health logs / alerts',
-                  value: c.shareHealth,
-                  onChanged: (v) => setState(() => consent = ElderConsent(
-                    shareLocation: c.shareLocation,
-                    shareHealth: v,
-                    shareMedia: c.shareMedia,
-                    shareSummary: c.shareSummary,
-                  )),
-                ),
-                LabeledSwitch(
-                  title: 'Share gallery',
-                  subtitle: 'Allow viewing photos/videos',
-                  value: c.shareMedia,
-                  onChanged: (v) => setState(() => consent = ElderConsent(
-                    shareLocation: c.shareLocation,
-                    shareHealth: c.shareHealth,
-                    shareMedia: v,
-                    shareSummary: c.shareSummary,
-                  )),
-                ),
-                LabeledSwitch(
-                  title: 'Share summaries',
-                  subtitle: 'Allow daily summaries to be shared',
-                  value: c.shareSummary,
-                  onChanged: (v) => setState(() => consent = ElderConsent(
-                    shareLocation: c.shareLocation,
-                    shareHealth: c.shareHealth,
-                    shareMedia: c.shareMedia,
-                    shareSummary: v,
-                  )),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: FilledButton.icon(
-                    icon: const Icon(Icons.save),
-                    label: const Text('Save'),
-                    onPressed: _save,
-                  ),
-                )
-              ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _triggerBack();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF9F9F4),
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _triggerBack),
+          title: const Text('Privacy & Consent', style: TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            SectionCard(
+              title: 'Who can see what?',
+              child: Column(
+                children: [
+                  _buildSwitch('Share location', 'Allow family to see my location', consent!.shareLocation, (v) => _updateConsent(location: v)),
+                  _buildSwitch('Share health', 'Allow health logs / alerts', consent!.shareHealth, (v) => _updateConsent(health: v)),
+                  _buildSwitch('Share gallery', 'Allow viewing photos', consent!.shareMedia, (v) => _updateConsent(media: v)),
+                  _buildSwitch('Daily summary', 'Share AI wellness reports', consent!.shareSummary, (v) => _updateConsent(summary: v)),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: FilledButton.icon(icon: const Icon(Icons.save), label: const Text('Save Settings'), onPressed: _save),
+                  )
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
+  }
+
+  void _updateConsent({bool? location, bool? health, bool? media, bool? summary}) {
+    setState(() {
+      consent = ElderConsent(
+        shareLocation: location ?? consent!.shareLocation,
+        shareHealth: health ?? consent!.shareHealth,
+        shareMedia: media ?? consent!.shareMedia,
+        shareSummary: summary ?? consent!.shareSummary,
+      );
+    });
+  }
+
+  Widget _buildSwitch(String t, String s, bool v, Function(bool) onChanged) {
+    return LabeledSwitch(title: t, subtitle: s, value: v, onChanged: onChanged);
   }
 }

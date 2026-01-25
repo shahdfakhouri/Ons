@@ -8,14 +8,9 @@ import 'pages/emergency_page.dart';
 import 'pages/calls_page.dart';
 import 'pages/location_page.dart';
 import 'pages/gallery_page.dart';
-
-// Entertainment (Fun)
 import 'pages/entertainment/elder_entertainment_page.dart';
-
-// Inbox + Privacy
 import 'pages/notifications_page.dart';
 import 'pages/consent_page.dart';
-
 import 'pages/profile_page.dart';
 import 'pages/community/elder_community_feed_page.dart';
 import 'pages/companion/elder_companion_chat_page.dart';
@@ -29,62 +24,71 @@ class ElderLayout extends StatefulWidget {
 
 class _ElderLayoutState extends State<ElderLayout> {
   int _index = 0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  void _goTo(int i) {
-    if (i < 0 || i >= _pages.length) return;
-    setState(() => _index = i);
-  }
-
-  late final List<Widget> _pages = [
-    ElderHomePage(onNavigate: _goTo), // 0
-    const MedicationTodayPage(),      // 1
-    const MoodPage(),                 // 2
-    const SymptomsPage(),             // 3
-    const EmergencyPage(),            // 4
-    const CallsPage(),                // 5
-    const LocationPage(),             // 6
-    const GalleryPage(),              // 7
-    const ElderEntertainmentPage(),   // 8 (Fun)
-    const NotificationsPage(),        // 9 (Inbox)
-    const ConsentPage(),              // 10 (Privacy)
-    const ProfilePage(),              // 11
-    const ElderCommunityFeedPage(),   // 12
-    const ElderCompanionChatPage(),   // 13
+  // ✅ Every widget now receives 'nav' (the _goTo function) as its 'onBack' or 'onNavigate' callback
+  late final List<Map<String, dynamic>> _navItems = [
+    {'label': 'Home', 'icon': Icons.home, 'widget': (nav) => ElderHomePage(onNavigate: nav)},                 // 0
+    {'label': 'Meds', 'icon': Icons.medication, 'widget': (nav) => MedicationTodayPage(onBack: nav)},          // 1
+    {'label': 'Mood', 'icon': Icons.mood, 'widget': (nav) => MoodPage(onBack: nav)},                         // 2
+    {'label': 'Symptoms', 'icon': Icons.healing, 'widget': (nav) => SymptomsPage(onBack: nav)},               // 3
+    {'label': 'SOS', 'icon': Icons.sos, 'widget': (nav) => EmergencyPage(onBack: nav)},                    // 4
+    {'label': 'Calls', 'icon': Icons.call, 'widget': (nav) => CallsPage(onBack: nav)},                      // 5
+    {'label': 'Location', 'icon': Icons.location_on, 'widget': (nav) => LocationPage(onBack: nav)},           // 6
+    {'label': 'Gallery', 'icon': Icons.photo, 'widget': (nav) => GalleryPage(onBack: nav)},                 // 7
+    {'label': 'Fun', 'icon': Icons.play_circle, 'widget': (nav) => ElderEntertainmentPage(onBack: nav)},      // 8
+    {'label': 'Inbox', 'icon': Icons.notifications, 'widget': (nav) => NotificationsPage(onBack: nav)},       // 9
+    {'label': 'Privacy', 'icon': Icons.lock, 'widget': (nav) => ConsentPage(onBack: nav)},                  // 10
+    {'label': 'Profile', 'icon': Icons.person, 'widget': (nav) => ProfilePage(onBack: nav)},                // 11
+    {'label': 'Community', 'icon': Icons.forum, 'widget': (nav) => ElderCommunityFeedPage(onBack: nav)},     // 12
+    {'label': 'Companion', 'icon': Icons.smart_toy, 'widget': (nav) => ElderCompanionChatPage(onBack: nav)}, // 13
   ];
 
-  int get _safeIndex {
-    final max = _pages.length - 1;
-    if (_index < 0) return 0;
-    if (_index > max) return max;
-    return _index;
+  void _goTo(int i) {
+    if (i < 0 || i >= _navItems.length) return;
+    setState(() => _index = i);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.sizeOf(context).width >= 900;
+    final width = MediaQuery.sizeOf(context).width;
+    final bool isWide = width >= 900;
 
     if (!isWide) {
       return Scaffold(
-        body: IndexedStack(index: _safeIndex, children: _pages),
+        key: _scaffoldKey,
+        appBar: AppBar(
+          automaticallyImplyLeading: false, // Prevents website home redirect
+          title: Text(_navItems[_index]['label'], style: const TextStyle(fontWeight: FontWeight.bold)),
+          centerTitle: true,
+          actions: [
+            if (_index != 4) 
+              IconButton(
+                icon: const Icon(Icons.sos, color: Colors.red),
+                onPressed: () => _goTo(4),
+              ),
+          ],
+        ),
+        drawer: _buildElderDrawer(),
+        body: _navItems[_index]['widget'](_goTo),
         bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _safeIndex,
-          onTap: _goTo,
+          currentIndex: _index <= 3 ? _index : 4, 
+          onTap: (i) {
+            if (i == 4) {
+              _scaffoldKey.currentState?.openDrawer();
+            } else {
+              _goTo(i);
+            }
+          },
           type: BottomNavigationBarType.fixed,
+          selectedItemColor: const Color(0xFF313647),
+          unselectedItemColor: Colors.grey,
           items: const [
-            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),            // 0
-            BottomNavigationBarItem(icon: Icon(Icons.medication), label: 'Meds'),      // 1
-            BottomNavigationBarItem(icon: Icon(Icons.mood), label: 'Mood'),            // 2
-            BottomNavigationBarItem(icon: Icon(Icons.healing), label: 'Symptoms'),     // 3
-            BottomNavigationBarItem(icon: Icon(Icons.sos), label: 'SOS'),              // 4
-            BottomNavigationBarItem(icon: Icon(Icons.call), label: 'Calls'),           // 5
-            BottomNavigationBarItem(icon: Icon(Icons.location_on), label: 'Location'), // 6
-            BottomNavigationBarItem(icon: Icon(Icons.photo), label: 'Gallery'),        // 7
-            BottomNavigationBarItem(icon: Icon(Icons.play_circle), label: 'Fun'),      // 8
-            BottomNavigationBarItem(icon: Icon(Icons.notifications), label: 'Inbox'),  // 9
-            BottomNavigationBarItem(icon: Icon(Icons.lock), label: 'Privacy'),         // 10
-            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),       // 11
-            BottomNavigationBarItem(icon: Icon(Icons.forum), label: 'Community'),      // 12
-            BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: 'Companion'),  // 13
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+            BottomNavigationBarItem(icon: Icon(Icons.medication), label: 'Meds'),
+            BottomNavigationBarItem(icon: Icon(Icons.smart_toy), label: 'AI'),
+            BottomNavigationBarItem(icon: Icon(Icons.sos, color: Colors.red), label: 'SOS'),
+            BottomNavigationBarItem(icon: Icon(Icons.menu), label: 'More'),
           ],
         ),
       );
@@ -93,35 +97,61 @@ class _ElderLayoutState extends State<ElderLayout> {
     return Scaffold(
       body: Row(
         children: [
-          SizedBox(
-            width: 92,
-            child: NavigationRail(
-              selectedIndex: _safeIndex,
-              onDestinationSelected: _goTo,
-              groupAlignment: -1,
-              labelType: NavigationRailLabelType.none,
-              destinations: const [
-                NavigationRailDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: Text('Home')),
-                NavigationRailDestination(icon: Icon(Icons.medication_outlined), selectedIcon: Icon(Icons.medication), label: Text('Meds')),
-                NavigationRailDestination(icon: Icon(Icons.mood_outlined), selectedIcon: Icon(Icons.mood), label: Text('Mood')),
-                NavigationRailDestination(icon: Icon(Icons.healing_outlined), selectedIcon: Icon(Icons.healing), label: Text('Symptoms')),
-                NavigationRailDestination(icon: Icon(Icons.sos_outlined), selectedIcon: Icon(Icons.sos), label: Text('SOS')),
-                NavigationRailDestination(icon: Icon(Icons.call_outlined), selectedIcon: Icon(Icons.call), label: Text('Calls')),
-                NavigationRailDestination(icon: Icon(Icons.location_on_outlined), selectedIcon: Icon(Icons.location_on), label: Text('Location')),
-                NavigationRailDestination(icon: Icon(Icons.photo_outlined), selectedIcon: Icon(Icons.photo), label: Text('Gallery')),
-                NavigationRailDestination(icon: Icon(Icons.play_circle_outline), selectedIcon: Icon(Icons.play_circle), label: Text('Fun')),
-                NavigationRailDestination(icon: Icon(Icons.notifications_outlined), selectedIcon: Icon(Icons.notifications), label: Text('Inbox')),
-                NavigationRailDestination(icon: Icon(Icons.lock_outline), selectedIcon: Icon(Icons.lock), label: Text('Privacy')),
-                NavigationRailDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: Text('Profile')),
-                NavigationRailDestination(icon: Icon(Icons.forum_outlined), selectedIcon: Icon(Icons.forum), label: Text('Community')),
-                NavigationRailDestination(icon: Icon(Icons.smart_toy_outlined), selectedIcon: Icon(Icons.smart_toy), label: Text('Companion')),
-              ],
-            ),
+          NavigationRail(
+            extended: isWide,
+            selectedIndex: _index,
+            onDestinationSelected: _goTo,
+            leading: _buildRailHeader(isWide),
+            destinations: _navItems.map((item) {
+              return NavigationRailDestination(
+                icon: Icon(item['icon']),
+                label: Text(item['label']),
+              );
+            }).toList(),
           ),
           const VerticalDivider(width: 1),
-          Expanded(child: IndexedStack(index: _safeIndex, children: _pages)),
+          Expanded(child: _navItems[_index]['widget'](_goTo)),
         ],
       ),
+    );
+  }
+
+  Widget _buildElderDrawer() {
+    return Drawer(
+      child: Column(
+        children: [
+          const DrawerHeader(
+            decoration: BoxDecoration(color: Color(0xFF313647)),
+            child: Center(
+              child: Text('Ons Menu', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _navItems.length,
+              itemBuilder: (context, i) {
+                return ListTile(
+                  leading: Icon(_navItems[i]['icon'], color: _index == i ? const Color(0xFFA3B087) : null),
+                  title: Text(_navItems[i]['label'], style: TextStyle(fontWeight: _index == i ? FontWeight.bold : FontWeight.normal)),
+                  onTap: () {
+                    _goTo(i);
+                    Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRailHeader(bool extended) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      child: extended 
+        ? const Text("ONS", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24, color: Color(0xFF313647))) 
+        : const Icon(Icons.auto_awesome, color: Color(0xFF313647)),
     );
   }
 }

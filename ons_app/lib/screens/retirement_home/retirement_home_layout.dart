@@ -10,7 +10,7 @@ import 'pages/elders_page.dart';
 import 'pages/alerts_page.dart';
 import 'pages/emergencies_page.dart';
 import 'pages/shifts_page.dart';
-import 'pages/payments_page.dart'; // Correctly mapped
+import 'pages/payments_page.dart'; 
 import 'pages/incidents_page.dart';
 
 class RetirementHomeLayout extends StatefulWidget {
@@ -29,17 +29,16 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
   static const _sage = Color(0xFFA3B087);
   static const _cream = Color(0xFFFFF8D4);
 
-  // ✅ SYNCED PAGE LIST (Must match the Sidebar order)
   final List<Widget> _pages = const [
-    RetirementDashboardPage(), // 0
-    RetirementCaregiversPage(), // 1
-    RetirementAssignmentsPage(), // 2
-    RetirementEldersPage(),      // 3
-    RetirementAlertsPage(),      // 4
-    RetirementEmergenciesPage(), // 5
-    RetirementShiftsPage(),      // 6
-    RetirementPaymentsPage(),    // 7
-    RetirementIncidentsPage(),   // 8
+    RetirementDashboardPage(),
+    RetirementCaregiversPage(),
+    RetirementAssignmentsPage(),
+    RetirementEldersPage(),
+    RetirementAlertsPage(),
+    RetirementEmergenciesPage(),
+    RetirementShiftsPage(),
+    RetirementPaymentsPage(),
+    RetirementIncidentsPage(),
   ];
 
   @override
@@ -53,32 +52,58 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
     if (closeDrawer) Navigator.pop(context);
   }
 
+  void _handleLogout() {
+    AuthService().logout();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginPage()), (r) => false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, c) {
-      final isWide = c.maxWidth >= 1100;
+      // Logic for Web vs Mobile
+      final bool isWide = c.maxWidth >= 1100;
+
       return Scaffold(
         backgroundColor: _cream,
+        // Mobile AppBar
         appBar: isWide ? null : AppBar(
-          title: const Text('Ons Admin'), 
-          backgroundColor: _deepNavy, 
-          foregroundColor: _cream,
+          title: const Text('Ons Retirement', style: TextStyle(fontWeight: FontWeight.bold)), 
+          backgroundColor: _cream, 
+          foregroundColor: _deepNavy,
           elevation: 0,
+          centerTitle: true,
         ),
-        drawer: isWide ? null : Drawer(child: _buildSidebar(isMobile: true)),
+        // Mobile Sidebar (Drawer)
+        drawer: isWide ? null : Drawer(
+          backgroundColor: Colors.white,
+          child: _buildSidebar(isMobile: true)
+        ),
         body: Row(
           children: [
-            if (isWide) SizedBox(width: 300, child: _buildSidebar(isMobile: false)),
+            // Desktop Sidebar
+            if (isWide) SizedBox(width: 280, child: _buildSidebar(isMobile: false)),
+            
+            // Main Content Area
             Expanded(
-              child: ClipRRect(
-                borderRadius: isWide ? const BorderRadius.only(topLeft: Radius.circular(40)) : BorderRadius.zero,
-                child: Container(
-                  color: _cream,
-                  child: Scaffold(
-                    backgroundColor: Colors.transparent,
-                    appBar: isWide ? _buildTopBar() : null,
-                    body: IndexedStack(index: _index, children: _pages),
-                  ),
+              child: Container(
+                color: _cream,
+                child: Column(
+                  children: [
+                    // Desktop TopBar (contains logout)
+                    if (isWide) _buildDesktopTopBar(),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: isWide 
+                            ? const BorderRadius.only(topLeft: Radius.circular(32)) 
+                            : BorderRadius.zero,
+                        child: Container(
+                          color: Colors.white.withOpacity(0.5),
+                          child: IndexedStack(index: _index, children: _pages),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -88,46 +113,61 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
     });
   }
 
-  PreferredSizeWidget _buildTopBar() {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      actions: [
-        TextButton.icon(
-          onPressed: () {
-            AuthService().logout();
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (_) => const LoginPage()), (r) => false);
-          },
-          icon: const Icon(Icons.logout_rounded, size: 18, color: _deepNavy),
-          label: const Text("Logout", style: TextStyle(color: _deepNavy, fontWeight: FontWeight.bold)),
-        ),
-        const SizedBox(width: 24),
-      ],
+  Widget _buildDesktopTopBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          TextButton.icon(
+            onPressed: _handleLogout,
+            icon: const Icon(Icons.logout_rounded, size: 18, color: _deepNavy),
+            label: const Text("Logout", style: TextStyle(color: _deepNavy, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildSidebar({required bool isMobile}) {
-    return NavigationDrawer(
-      backgroundColor: Colors.white,
-      indicatorColor: _sage.withOpacity(0.3),
-      selectedIndex: _index,
-      onDestinationSelected: (i) => _goTo(i, closeDrawer: isMobile),
+    return Column(
       children: [
-        _buildBrandedHeader(),
-        const _SidebarLabel("MANAGEMENT"),
-        _dest(Icons.dashboard_outlined, Icons.dashboard_rounded, 'Dashboard'),
-        _dest(Icons.badge_outlined, Icons.badge_rounded, 'Caregivers'),
-        _dest(Icons.link_outlined, Icons.link_rounded, 'Assignments'),
-        _dest(Icons.people_outline, Icons.people_rounded, 'Residents'),
-        const _SidebarLabel("OPERATIONS"),
-        _dest(Icons.notifications_none, Icons.notifications_rounded, 'Alerts'),
-        _dest(Icons.warning_amber_outlined, Icons.warning_rounded, 'Emergencies'),
-        _dest(Icons.schedule_outlined, Icons.schedule_rounded, 'Shifts'),
-        const _SidebarLabel("FINANCE & DATA"),
-        _dest(Icons.payments_outlined, Icons.payments_rounded, 'Payments'),
-        _dest(Icons.report_gmailerrorred_outlined, Icons.report_rounded, 'Incidents'),
-        const SizedBox(height: 20),
+        Expanded(
+          child: NavigationDrawer(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            indicatorColor: _sage.withOpacity(0.2),
+            selectedIndex: _index,
+            onDestinationSelected: (i) => _goTo(i, closeDrawer: isMobile),
+            children: [
+              _buildBrandedHeader(),
+              const _SidebarLabel("MANAGEMENT"),
+              _dest(Icons.dashboard_outlined, Icons.dashboard_rounded, 'Dashboard'),
+              _dest(Icons.badge_outlined, Icons.badge_rounded, 'Caregivers'),
+              _dest(Icons.link_outlined, Icons.link_rounded, 'Assignments'),
+              _dest(Icons.people_outline, Icons.people_rounded, 'Residents'),
+              const _SidebarLabel("OPERATIONS"),
+              _dest(Icons.notifications_none, Icons.notifications_rounded, 'Alerts'),
+              _dest(Icons.warning_amber_outlined, Icons.warning_rounded, 'Emergencies'),
+              _dest(Icons.schedule_outlined, Icons.schedule_rounded, 'Shifts'),
+              const _SidebarLabel("FINANCE & DATA"),
+              _dest(Icons.payments_outlined, Icons.payments_rounded, 'Payments'),
+              _dest(Icons.report_gmailerrorred_outlined, Icons.report_rounded, 'Incidents'),
+            ],
+          ),
+        ),
+        // FIXED LOGOUT BUTTON: Appears at the bottom of the sidebar for Mobile
+        if (isMobile) 
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: ListTile(
+              onTap: _handleLogout,
+              leading: const Icon(Icons.logout_rounded, color: Colors.redAccent),
+              title: const Text("Logout", style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              tileColor: Colors.redAccent.withOpacity(0.05),
+            ),
+          ),
       ],
     );
   }
@@ -151,7 +191,6 @@ class _RetirementHomeLayoutState extends State<RetirementHomeLayout> {
             decoration: BoxDecoration(
               color: _deepNavy, 
               borderRadius: BorderRadius.circular(14),
-              boxShadow: [BoxShadow(color: _deepNavy.withOpacity(0.2), blurRadius: 10)]
             ),
             child: const Icon(Icons.auto_awesome_rounded, color: _cream, size: 22),
           ),
@@ -171,7 +210,7 @@ class _SidebarLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(28, 20, 28, 10),
-      child: Text(text, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1.5, color: Color(0xFF8E9297))),
+      child: Text(text, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.2, color: Color(0xFF8E9297))),
     );
   }
 }

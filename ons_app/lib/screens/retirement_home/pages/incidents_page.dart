@@ -42,9 +42,24 @@ class _RetirementIncidentsPageState extends State<RetirementIncidentsPage> {
     }
   }
 
-  // UI Helper for Creating Incident (Enhanced Dialog)
   Future<void> _createIncident() async {
-    // ... logic same as your original, but style the dialog with _deepNavy ...
+    // Styling the dialog with ONS brand colors
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: const Text("New Log", style: TextStyle(color: _deepNavy, fontWeight: FontWeight.bold)),
+        content: const Text("Would you like to log a new facility incident?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: _denim))),
+          FilledButton(
+            onPressed: () { Navigator.pop(context); /* Implementation of Create */ },
+            style: FilledButton.styleFrom(backgroundColor: _deepNavy),
+            child: const Text("Confirm"),
+          )
+        ],
+      ),
+    );
   }
 
   @override
@@ -52,56 +67,92 @@ class _RetirementIncidentsPageState extends State<RetirementIncidentsPage> {
     if (_loading) return const Center(child: CircularProgressIndicator(color: _deepNavy));
     if (_error != null) return Center(child: Text(_error!, style: const TextStyle(color: Colors.red)));
 
+    final bool isMobile = MediaQuery.of(context).size.width < 700;
+
     return RefreshIndicator(
       onRefresh: _load,
       color: _deepNavy,
       child: ListView(
-        padding: const EdgeInsets.all(32),
+        padding: EdgeInsets.all(isMobile ? 16 : 32),
         children: [
-          _buildHeader(),
-          const SizedBox(height: 32),
+          _buildHeader(isMobile),
+          const SizedBox(height: 24),
           if (_incidents.isEmpty)
-            _buildEmptyState()
+            _buildEmptyState(isMobile)
           else
-            ..._incidents.map((i) => _buildIncidentBento(i)),
+            ..._incidents.map((i) => _buildIncidentBento(i, isMobile)),
         ],
       ),
     );
   }
 
-  Widget _buildHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildHeader(bool isMobile) {
+    final titleSection = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Incidents', style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, color: _deepNavy, letterSpacing: -1)),
-            Text('Monitoring facility safety logs', style: TextStyle(color: _denim, fontSize: 16)),
-          ],
+        Text(
+          'Incidents', 
+          style: TextStyle(
+            fontSize: isMobile ? 28 : 34, 
+            fontWeight: FontWeight.w900, 
+            color: _deepNavy, 
+            letterSpacing: -1
+          )
         ),
-        Row(
-          children: [
-            _buildFilter(),
-            const SizedBox(width: 12),
-            IconButton.filled(
-              onPressed: _createIncident,
-              icon: const Icon(Icons.add, color: _cream),
-              style: IconButton.styleFrom(backgroundColor: _deepNavy, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-            ),
-          ],
+        Text(
+          'Monitoring facility safety logs', 
+          style: TextStyle(color: _denim, fontSize: isMobile ? 13 : 16)
         ),
       ],
     );
+
+    final actionSection = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildFilter(),
+        const SizedBox(width: 12),
+        IconButton.filled(
+          onPressed: _createIncident,
+          icon: const Icon(Icons.add, color: _cream),
+          style: IconButton.styleFrom(
+            backgroundColor: _deepNavy, 
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            minimumSize: const Size(48, 48)
+          ),
+        ),
+      ],
+    );
+
+    return isMobile 
+      ? Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            titleSection,
+            const SizedBox(height: 20),
+            actionSection,
+          ],
+        )
+      : Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            titleSection,
+            actionSection,
+          ],
+        );
   }
 
   Widget _buildFilter() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: Colors.white, 
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]
+      ),
       child: DropdownButton<String>(
         value: _status,
         underline: const SizedBox(),
+        icon: const Icon(Icons.filter_list_rounded, color: _deepNavy, size: 20),
         items: const [
           DropdownMenuItem(value: 'all', child: Text('All')),
           DropdownMenuItem(value: 'open', child: Text('Open')),
@@ -117,40 +168,50 @@ class _RetirementIncidentsPageState extends State<RetirementIncidentsPage> {
     );
   }
 
-  Widget _buildIncidentBento(Map<String, dynamic> i) {
+  Widget _buildIncidentBento(Map<String, dynamic> i, bool isMobile) {
     final severity = (i['severity'] ?? 'medium').toString().toLowerCase();
     final Color sevColor = severity == 'high' ? Colors.redAccent : (severity == 'medium' ? Colors.orange : _sage);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        boxShadow: [BoxShadow(color: _deepNavy.withOpacity(0.04), blurRadius: 20, offset: const Offset(0, 8))],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: _deepNavy.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 4))],
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(24),
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => RetirementIncidentDetailsPage(incidentId: i['incident_id'])),
         ).then((_) => _load()),
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: EdgeInsets.all(isMobile ? 16 : 24),
           child: Row(
             children: [
-              _severityIcon(sevColor, severity == 'high'),
-              const SizedBox(width: 20),
+              _severityIcon(sevColor, severity == 'high', isMobile),
+              const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text((i['type'] ?? 'Incident').toString().toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: sevColor, letterSpacing: 1)),
-                    Text(i['elder_name'] ?? 'Unknown Resident', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _deepNavy)),
-                    Text("Status: ${i['status']}", style: const TextStyle(color: _denim, fontSize: 13)),
+                    Text(
+                      (i['type'] ?? 'Incident').toString().toUpperCase(), 
+                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: sevColor, letterSpacing: 1)
+                    ),
+                    Text(
+                      i['elder_name'] ?? 'Unknown Resident', 
+                      style: TextStyle(fontSize: isMobile ? 16 : 18, fontWeight: FontWeight.w800, color: _deepNavy),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      "Status: ${i['status']}", 
+                      style: const TextStyle(color: _denim, fontSize: 12)
+                    ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: _denim, size: 20),
+              const Icon(Icons.chevron_right, color: _denim, size: 18),
             ],
           ),
         ),
@@ -158,19 +219,33 @@ class _RetirementIncidentsPageState extends State<RetirementIncidentsPage> {
     );
   }
 
-  Widget _severityIcon(Color color, bool pulse) {
+  Widget _severityIcon(Color color, bool pulse, bool isMobile) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(isMobile ? 10 : 12),
       decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
-      child: Icon(pulse ? Icons.error_outline_rounded : Icons.assignment_late_rounded, color: color, size: 24),
+      child: Icon(
+        pulse ? Icons.error_outline_rounded : Icons.assignment_late_rounded, 
+        color: color, 
+        size: isMobile ? 20 : 24
+      ),
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(bool isMobile) {
     return Container(
-      padding: const EdgeInsets.all(48),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(32)),
-      child: const Center(child: Text("No incident logs found.", style: TextStyle(color: _denim, fontStyle: FontStyle.italic))),
+      padding: EdgeInsets.all(isMobile ? 40 : 60),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)),
+      child: Column(
+        children: [
+          const Icon(Icons.description_outlined, color: _sage, size: 48),
+          const SizedBox(height: 16),
+          Text(
+            "No incident logs found.", 
+            textAlign: TextAlign.center,
+            style: TextStyle(color: _denim, fontStyle: FontStyle.italic, fontSize: isMobile ? 14 : 16)
+          ),
+        ],
+      ),
     );
   }
 }
